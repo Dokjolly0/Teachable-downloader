@@ -4,8 +4,10 @@ import logging
 import os
 import re
 import string
+import subprocess
 import sys
 import time
+import zipfile
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
@@ -21,7 +23,7 @@ from seleniumbase import Driver
 
 def create_folder(course_title):
     root_path = os.path.abspath(os.getcwd())
-    course_path = os.path.join(root_path, "courses", course_title)
+    course_path = os.path.join(root_path, "downloads", "courses", course_title)
     os.makedirs(course_path, exist_ok=True)
     return course_path
 
@@ -30,23 +32,25 @@ def clean_string(data):
     logging.debug("Cleaning string: " + data)
     # Remove all non-ASCII characters (including emojis)
     data = data.encode("ascii", "ignore").decode("ascii")
-    # Replace specific characters with "-"
+    # Replace specific characters with char '-'
+    char: str = "-"
     return (
-        data.replace("\n", "-")
-        .replace(" ", "-")
-        .replace(":", "-")
-        .replace("/", "-")
-        .replace("|", "-")
+        data.replace("\n", char)
+        .replace(" ", char)
+        .replace(":", char)
+        .replace("/", char)
+        .replace("|", char)
         .replace("*", "")
-        .replace("?", "-")
-        .replace("<", "-")
-        .replace(">", "-")
-        .replace('"', "-")
-        .replace("\\", "-")
+        .replace("?", char)
+        .replace("<", char)
+        .replace(">", char)
+        .replace('"', char)
+        .replace("\\", char)
     )
 
 
 def truncate_title_to_fit_file_name(title, max_file_name_length=250):
+    """Truncate the title to fit the file name length."""
     # the file name length should not be too long
     # truncate the title to accommodate the max used file extension length and lecture index prefix
     max_title_length = max_file_name_length - len(".mp4.part-Frag0000.part") - 3
@@ -55,6 +59,46 @@ def truncate_title_to_fit_file_name(title, max_file_name_length=250):
         logging.warning("Truncating title: " + turncated_title)
         return turncated_title
     return title
+
+
+def extract(file_path, destination_folder):
+    try:
+        with zipfile.ZipFile(file_path, "r") as zip_ref:
+            zip_ref.extractall(destination_folder)
+    except Exception as e:
+        logging.error(f"Failed to extract {file_path}: {e}")
+
+
+def check_ffmpeg_available(ffmpeg_path="./bin/ffmpeg.exe"):
+    """Check if ffmpeg is available at the specified path"""
+    if os.path.exists(ffmpeg_path):
+        logging.info(f"✅ FFmpeg trovato in: {ffmpeg_path}")
+        return ffmpeg_path
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-version"], capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            logging.info("FFmpeg found in PATH")
+            return "ffmpeg"
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+        pass
+    return None
+
+
+def install_ffmpeg():
+    try:
+        download_url = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z"
+        ffmpeg_7z_path = "./bin/ffmpeg.7z"
+        os.makedirs("./bin", exist_ok=True)
+        wget.download(download_url, ffmpeg_7z_path)
+        extract(ffmpeg_7z_path, "./bin/ffmpeg.exe")
+        os.remove(ffmpeg_7z_path)
+        logging.info("FFmpeg installed successfully")
+    except subprocess.CalledProcessError:
+        logging.error("Failed to install FFmpeg")
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
 
 
 class TeachableDownloader:
@@ -754,6 +798,13 @@ class TeachableDownloader:
             time.sleep(3)
 
     def download_video(self, link, title, video_index, output_path):
+        # Check if ffmpeg is available
+        ffmpeg_path = check_ffmpeg_available()
+        if not ffmpeg_path:
+            install_ffmpeg()
+
+        sys.exit(1)
+
         ydl_opts = {
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "merge_output_format": "mp4",
@@ -773,6 +824,11 @@ class TeachableDownloader:
             ),
             "verbose": self.verbose,
         }
+
+        # If ffmpeg is in a specific path, add it to the options
+        if ffmpeg_path != "ffmpeg":
+            ydl_opts["ffmpeg_location"] = ffmpeg_path
+
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([link])
@@ -781,6 +837,14 @@ class TeachableDownloader:
 
     # This function is needed because yt-dlp subtitle downloader is not working
     def download_subtitle(self, link, title, video_index, output_path):
+        # Check if ffmpeg is available
+        ffmpeg_path = check_ffmpeg_available()
+        # if not ffmpeg_path:
+        #     logging.error("❌ FFmpeg not found!")
+        #     logging.error("Install ffmpeg or put it in ./bin/ffmpeg.exe")
+        #     logging.error("Download from: https://www.gyan.dev/ffmpeg/builds/")
+        #     sys.exit(1)
+
         ydl_opts = {
             "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
             "merge_output_format": "mp4",
@@ -801,6 +865,10 @@ class TeachableDownloader:
             "outtmpl": os.path.join(output_path, title),
             "verbose": self.verbose,
         }
+
+        # Se ffmpeg è in una path specifica, aggiungila alle opzioni
+        if ffmpeg_path != "ffmpeg":
+            ydl_opts["ffmpeg_location"] = ffmpeg_path
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -1094,3 +1162,6 @@ if __name__ == "__main__":
             logging.error("Error: " + str(e))
             downloader.clean_up()
             sys.exit(1)
+
+
+# .\env\Scripts\python main.py --url "https://primeradsec.teachable.com/p/impara-a-usare-vim-come-un-ide" --man_login_url "https://primeradsec.teachable.com/p/impara-a-usare-vim-come-un-ide" -v --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
