@@ -16,6 +16,7 @@ def check_required_args(args: StartupArguments):
     logger.log(
         "Required arguments are missing. \nUse --email and --password or --manual-login-url",
         status=logger.Status.ERROR,
+        verbose_level=0,
     )
     return False
 
@@ -68,7 +69,7 @@ def get_startup_arguments() -> StartupArguments:
             "-v",
             "--verbose-level",
             action="count",
-            default=0,
+            default=1,
             help="Increase verbosity level (repeat for more verbosity)",
         )
         parser.add_argument(

@@ -1,6 +1,9 @@
 import logging
 from enum import Enum
 
+from src.interfaces.startup_arguments import StartupArguments
+from src.utils.startup_arguments import get_startup_arguments
+
 
 class Status(Enum):
     ERROR = "error"
@@ -9,7 +12,7 @@ class Status(Enum):
     DEBUG = "debug"
 
 
-def log(message: str, status: Status = Status.INFO, verbose_level: int = 0):
+def log(message: str, status: Status = Status.INFO, verbose_level: int = -1):
     """Function to log a message with the appropriate log level.
 
     Args:
@@ -24,8 +27,11 @@ def log(message: str, status: Status = Status.INFO, verbose_level: int = 0):
         log_level = logging.WARNING
     elif verbose_level == 1:
         log_level = logging.INFO
-    else:
+    elif verbose_level == 2:
         log_level = logging.DEBUG
+    else:
+        args: StartupArguments = get_startup_arguments()
+        log_level = args.verbose_level
 
     logging.basicConfig(level=log_level, format="%(levelname)s: %(message)s")
 
