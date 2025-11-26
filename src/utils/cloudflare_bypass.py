@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import time
+from typing import TYPE_CHECKING
 
 from selenium.webdriver.common.by import By
 
 import src.helpers.logger as logger
-from src.teachable.teachable_downloader import TeachableDownloader
+
+if TYPE_CHECKING:
+    from src.teachable.teachable_downloader import TeachableDownloader
 
 
 def bypass_cloudflare(teachable: "TeachableDownloader") -> TeachableDownloader:

@@ -6,7 +6,8 @@ import re
 import string
 import sys
 import time
-from typing import Any, Dict, Optional, cast
+import traceback
+from typing import Any, Dict, Mapping, Optional, cast
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import requests
@@ -18,9 +19,9 @@ from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from seleniumbase import Driver
-from yt_dlp.extractor.common import _InfoDict
 
 import src.helpers.logger as logger
+from src.helpers.exception import save_debug_artifacts
 from src.helpers.ffmpeg import check_ffmpeg_available, install_ffmpeg
 from src.helpers.file_helper import (
     clean_string,
@@ -89,7 +90,13 @@ class TeachableDownloader:
             try:
                 self.login(email, password)
             except Exception as e:
-                logger.log(f"Could not login: {e}", status=logger.Status.ERROR)
+                tb = traceback.format_exc()
+                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
+                # salva artefatti per debugging
+                try:
+                    save_debug_artifacts(self.driver, prefix="login_failure")
+                except Exception:
+                    pass
                 return
         else:
             self.driver.get(course_url)
@@ -146,7 +153,13 @@ class TeachableDownloader:
             try:
                 self.login(email, password)
             except Exception as e:
-                logger.log(f"Could not login: {e}", status=logger.Status.ERROR)
+                tb = traceback.format_exc()
+                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
+                # salva artefatti per debugging
+                try:
+                    save_debug_artifacts(self.driver, prefix="login_failure")
+                except Exception:
+                    pass
                 return
         else:
             self.driver.get(url_array[0])
@@ -213,27 +226,26 @@ class TeachableDownloader:
         email_element = WebDriverWait(self.driver, self.global_timeout).until(
             EC.presence_of_element_located((By.ID, "email"))
         )
-        password_element = WebDriverWait(self.driver, self.global_timeout).until(
-            EC.presence_of_element_located((By.ID, "password"))
-        )
-        commit_element = WebDriverWait(self.driver, self.global_timeout).until(
-            EC.presence_of_element_located((By.NAME, "commit"))
-        )
+        # logger.log(f"Email element found {email_element}", status=logger.Status.DEBUG)
+        # password_element = WebDriverWait(self.driver, self.global_timeout).until(
+        #     EC.presence_of_element_located((By.ID, "password"))
+        # )
+        # commit_element = WebDriverWait(self.driver, self.global_timeout).until(
+        #     EC.presence_of_element_located((By.NAME, "commit"))
+        # )
 
         logger.log("Filling in login form", status=logger.Status.DEBUG)
         email_element.click()
         email_element.clear()
+        email_element.send_keys(email)
         self.driver.execute_script(
             "document.getElementById('email').value='" + email + "'"
         )
+        # self.driver.execute_script(
+        #     "document.getElementById('password').value='" + password + "'"
+        # )
 
-        password_element.click()
-        password_element.clear()
-        self.driver.execute_script(
-            "document.getElementById('password').value='" + password + "'"
-        )
-
-        commit_element.click()
+        # commit_element.click()
 
         # Check for login error due to incorrect credentials
         logger.log("Checking for login error", status=logger.Status.DEBUG)
@@ -815,7 +827,7 @@ class TeachableDownloader:
         if ffmpeg_path != "ffmpeg":
             ydl_opts["ffmpeg_location"] = ffmpeg_path
 
-        info_json: Optional[_InfoDict] = None
+        info_json: Optional[Mapping[str, Any]] = None
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(link, download=False)

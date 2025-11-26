@@ -41,3 +41,23 @@ def clean_string(data):
         .replace('"', char)
         .replace("\\", char)
     )
+
+
+def read_urls_from_file(file_path):
+    urls = []
+    try:
+        with open(file_path, "r") as file:
+            urls = file.read().splitlines()
+    except FileNotFoundError:
+        logging.error(f"File not found: {file_path}")
+    except IOError as e:
+        logging.error(f"IOError reading file: {file_path}. Error: {str(e)}")
+    except Exception as e:
+        logging.error(f"Unexpected error reading file: {file_path}. Error: {str(e)}")
+
+    if urls:
+        logging.info(f"Successfully read {len(urls)} URLs from file: {file_path}")
+    else:
+        logging.warning(f"No URLs found in file: {file_path}")
+
+    return urls
