@@ -1,8 +1,6 @@
 import logging
 from enum import Enum
 
-from websockets.protocol import State
-
 
 class Status(Enum):
     ERROR = "error"
