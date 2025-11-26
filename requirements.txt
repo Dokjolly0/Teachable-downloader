@@ -3,3 +3,5 @@ wget>=3.2
 requests>=2.31.0
 yt-dlp
 seleniumbase>=4.20.8
+pycryptodomex
+ffmpeg-python
