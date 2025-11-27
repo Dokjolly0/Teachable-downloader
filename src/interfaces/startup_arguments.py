@@ -15,3 +15,4 @@ class StartupArguments:
     file_urls_path: str = field(default="")
     user_agent: str = field(default="")
     selenium_driver_timeout: int = field(default=0)
+    chrome_profile_path: str = field(default="")

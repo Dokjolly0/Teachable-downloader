@@ -9,6 +9,7 @@ from src.utils.startup_arguments import get_startup_arguments
 
 if __name__ == "__main__":
     args = get_startup_arguments()
+    print(args)
     downloader = TeachableDownloader(args=args)
     if args.file_urls_path:
         urls = read_urls_from_file(args.file_urls_path)
@@ -35,9 +36,8 @@ if __name__ == "__main__":
             downloader.run(
                 course_url=args.url,
                 email=args.email,
-                password=args.password,
                 login_url=args.login_url,
-                manual_login_url=args.manual_login_url,
+                chrome_profile_path=args.chrome_profile_path,
             )
             downloader.clean_up()
             sys.exit(0)

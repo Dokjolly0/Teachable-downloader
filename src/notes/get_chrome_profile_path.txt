@@ -1,0 +1,4 @@
+# Default Profile
+--chrome-profile="C:\Users\UserName\AppData\Local\Google\Chrome\User Data\Default"
+# Specific Profile
+--chrome-profile="C:\Users\UserName\AppData\Local\Google\Chrome\User Data\Profile 1"

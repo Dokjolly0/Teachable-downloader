@@ -35,7 +35,6 @@ from src.utils.handle_otp_login import handle_otp_login
 
 class TeachableDownloader:
     def __init__(self, args: StartupArguments):
-        self.driver = Driver(uc=True, headed=True)
         self.headers = {
             "User-Agent": args.user_agent,
             "Origin": "https://player.hotmart.com",
@@ -44,6 +43,16 @@ class TeachableDownloader:
         self.verbose = args.verbose_level
         self._complete_lecture = args.complete_lecture
         self.global_timeout = args.selenium_driver_timeout
+
+        if args.chrome_profile_path:
+            self.driver = Driver(
+                uc=True,
+                headed=True,
+                browser="chrome",
+                user_data_dir=args.chrome_profile_path,
+            )
+        else:
+            self.driver = Driver(uc=True, headed=True)
 
     def check_elem_exists(self, by, selector, timeout):
         """
@@ -66,7 +75,7 @@ class TeachableDownloader:
         else:
             return True  # If try not raise exception
 
-    def run(self, course_url, email, password, login_url, manual_login_url):
+    def run(self, course_url, email, login_url, chrome_profile_path):
         """
         Run the downloader
         1. course_url: URL of the course
@@ -78,38 +87,24 @@ class TeachableDownloader:
         """
         logger.log("Starting login", status=logger.Status.INFO)
 
-        if manual_login_url is None:
-            # Check if login_url is not set
-            if login_url is None:
-                try:
-                    self.find_login(course_url)
-                except Exception as e:
-                    logger.log(f"Could not find login: {e}", status=logger.Status.ERROR)
-            else:
-                self.driver.get(login_url)
+        if not chrome_profile_path:
+            pass
+        else:
+            logger.log("Using existing Chrome session", status=logger.Status.INFO)
+            self.driver.get(course_url)
 
             try:
-                self.login(email)
+                WebDriverWait(self.driver, timeout=10).until(
+                    EC.presence_of_element_located((By.TAG_NAME, "body"))
+                )
+                logger.log(
+                    "Chrome session loaded successfully", status=logger.Status.INFO
+                )
             except Exception as e:
-                tb = traceback.format_exc()
-                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
-                # salva artefatti per debugging
-                try:
-                    save_debug_artifacts(self.driver, prefix="login_failure")
-                except Exception:
-                    pass
+                logger.log(
+                    f"Error loading Chrome session: {e}", status=logger.Status.ERROR
+                )
                 return
-        else:
-            self.driver.get(course_url)
-            while self.driver.current_url != manual_login_url:
-                time.sleep(3)
-                logger.log(
-                    "Waiting for user to navigate to url: " + manual_login_url,
-                    status=logger.Status.INFO,
-                )
-                logger.log(
-                    "Current url: " + self.driver.current_url, status=logger.Status.INFO
-                )
 
         logger.log(
             "Starting download of course: " + course_url, status=logger.Status.INFO

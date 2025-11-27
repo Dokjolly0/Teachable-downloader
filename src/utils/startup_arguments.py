@@ -40,6 +40,7 @@ def set_startup_arguments(args):
                 file_urls_path=args.file_urls_path,
                 user_agent=args.user_agent,
                 selenium_driver_timeout=args.selenium_driver_timeout,
+                chrome_profile_path=args.chrome_profile,
             )
         return startup_arguments
     except KeyboardInterrupt:
@@ -107,6 +108,11 @@ def get_startup_arguments() -> StartupArguments:
             required=False,
             help="Timeout for selenium driver",
             default=10,
+        )
+        parser.add_argument(
+            "--chrome-profile",
+            required=False,
+            help="Path to Chrome profile directory to use existing session",
         )
         args = parser.parse_args()
 
