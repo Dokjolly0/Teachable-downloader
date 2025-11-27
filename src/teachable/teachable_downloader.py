@@ -226,26 +226,15 @@ class TeachableDownloader:
         email_element = WebDriverWait(self.driver, self.global_timeout).until(
             EC.presence_of_element_located((By.ID, "email"))
         )
-        # logger.log(f"Email element found {email_element}", status=logger.Status.DEBUG)
-        # password_element = WebDriverWait(self.driver, self.global_timeout).until(
-        #     EC.presence_of_element_located((By.ID, "password"))
-        # )
-        # commit_element = WebDriverWait(self.driver, self.global_timeout).until(
-        #     EC.presence_of_element_located((By.NAME, "commit"))
-        # )
+        access_button = WebDriverWait(self.driver, self.global_timeout).until(
+            EC.presence_of_element_located((By.ID, "otp-login-btn"))
+        )
 
         logger.log("Filling in login form", status=logger.Status.DEBUG)
         email_element.click()
         email_element.clear()
         email_element.send_keys(email)
-        self.driver.execute_script(
-            "document.getElementById('email').value='" + email + "'"
-        )
-        # self.driver.execute_script(
-        #     "document.getElementById('password').value='" + password + "'"
-        # )
-
-        # commit_element.click()
+        access_button.click()
 
         # Check for login error due to incorrect credentials
         logger.log("Checking for login error", status=logger.Status.DEBUG)
