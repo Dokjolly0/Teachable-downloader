@@ -30,6 +30,7 @@ from src.helpers.file_helper import (
 )
 from src.interfaces.startup_arguments import StartupArguments
 from src.utils.cloudflare_bypass import bypass_cloudflare
+from src.utils.handle_otp_login import handle_otp_login
 
 
 class TeachableDownloader:
@@ -213,56 +214,31 @@ class TeachableDownloader:
 
     def login(self, email, password):
         logger.log("Logging in", status=logger.Status.INFO)
-
+        # Cloudflare bypass
         if self.check_elem_exists(
             By.ID, "challenge-stage", timeout=self.global_timeout
         ):
             self = bypass_cloudflare(self)
 
+        # Wait for the login form to appear
         WebDriverWait(self.driver, timeout=15).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
-
         email_element = WebDriverWait(self.driver, self.global_timeout).until(
             EC.presence_of_element_located((By.ID, "email"))
         )
         access_button = WebDriverWait(self.driver, self.global_timeout).until(
             EC.presence_of_element_located((By.ID, "otp-login-btn"))
         )
-
         logger.log("Filling in login form", status=logger.Status.DEBUG)
         email_element.click()
         email_element.clear()
         email_element.send_keys(email)
         access_button.click()
 
-        # Check for login error due to incorrect credentials
-        logger.log("Checking for login error", status=logger.Status.DEBUG)
-        try:
-            error_elements = WebDriverWait(self.driver, self.global_timeout).until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, "div.toast, span.text-with-icon")
-                )
-            )
-            for element in error_elements:
-                if "Your email or password is incorrect" in element.text:
-                    logger.log(
-                        "Login failed: Incorrect email or password.",
-                        status=logger.Status.ERROR,
-                    )
-                    return False
-        except TimeoutException:
-            # No error message found, continue
-            pass
-
-        # Check for new device challenge
-        # input with name otp_code
-        if self.check_elem_exists(By.NAME, "otp_code", timeout=self.global_timeout):
-            # wait for user to enter code
-            input(
-                "\033[93mWarning: New device challenge\nplease enter the code sent to your email and press enter to "
-                "continue\033[0m"
-            )
+        # Wait for the OTP form
+        logger.log("Waiting for OTP code", status=logger.Status.DEBUG)
+        self = handle_otp_login(self)
         logger.log("Logged in, switching to course page", status=logger.Status.INFO)
         time.sleep(3)
 

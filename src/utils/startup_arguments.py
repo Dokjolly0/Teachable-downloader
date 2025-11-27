@@ -9,7 +9,7 @@ startup_arguments: Optional["StartupArguments"] = None
 
 
 def check_required_args(args: StartupArguments):
-    if args.email and args.password:
+    if args.email:
         return True
     elif args.manual_login_url:
         return True
