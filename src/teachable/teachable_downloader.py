@@ -89,7 +89,7 @@ class TeachableDownloader:
                 self.driver.get(login_url)
 
             try:
-                self.login(email, password)
+                self.login(email)
             except Exception as e:
                 tb = traceback.format_exc()
                 logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
@@ -152,7 +152,7 @@ class TeachableDownloader:
                 return
 
             try:
-                self.login(email, password)
+                self.login(email)
             except Exception as e:
                 tb = traceback.format_exc()
                 logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
@@ -212,7 +212,7 @@ class TeachableDownloader:
         else:
             login_element.click()
 
-    def login(self, email, password):
+    def login(self, email):
         logger.log("Logging in", status=logger.Status.INFO)
         # Cloudflare bypass
         if self.check_elem_exists(
