@@ -4,16 +4,13 @@ import json
 import os
 import re
 import string
-import sys
 import time
 import traceback
-from typing import Any, Dict, Mapping, Optional, cast
-from urllib.parse import urljoin, urlparse, urlunparse
+from typing import Any, cast
+from urllib.parse import urlparse, urlunparse
 
 import requests
 import selenium.webdriver.support.expected_conditions as EC
-import wget
-import yt_dlp
 from selenium.common import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
@@ -22,15 +19,18 @@ from seleniumbase import Driver
 import src.helpers.logger as logger
 from src.helpers.check_element_exists import check_element_exists
 from src.helpers.exception import save_debug_artifacts
-from src.helpers.ffmpeg import check_ffmpeg_available, install_ffmpeg
 from src.helpers.file_helper import (
     clean_string,
     create_course_folder,
     truncate_title_to_fit_file_name,
 )
 from src.interfaces.startup_arguments import StartupArguments
+from src.teachable.auth.login import find_login, login
+from src.teachable.download.downlaod_video_attachments import download_attachments
+from src.teachable.download.download_subtitle import download_subtitle
+from src.teachable.download.download_video import download_video
+from src.teachable.download.download_video_file import download_video_file
 from src.utils.cloudflare_bypass import bypass_cloudflare
-from src.utils.handle_otp_login import handle_otp_login
 
 
 class TeachableDownloader:
@@ -60,14 +60,14 @@ class TeachableDownloader:
         # Check if login_url is not set
         if login_url is None:
             try:
-                self.find_login(course_url)
+                find_login(self, course_url)
             except Exception as e:
                 logger.log(f"Could not find login: {e}", status=logger.Status.ERROR)
         else:
             self.driver.get(login_url)
 
         try:
-            self.login(email)
+            login(self, email)
         except Exception as e:
             tb = traceback.format_exc()
             logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
@@ -115,7 +115,7 @@ class TeachableDownloader:
             return
 
         try:
-            self.login(email)
+            login(self, email)
         except Exception as e:
             tb = traceback.format_exc()
             logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
@@ -144,53 +144,6 @@ class TeachableDownloader:
             (parsed_url.scheme, parsed_url.netloc, sign_in_path, "", "", "")
         )
         return fallback_url
-
-    def find_login(self, course_url):
-        logger.log("Trying to find login", status=logger.Status.INFO)
-        self.driver.implicitly_wait(self.global_timeout)
-        self.driver.get(course_url)
-
-        try:
-            login_element = WebDriverWait(self.driver, self.global_timeout).until(
-                EC.presence_of_element_located((By.LINK_TEXT, "Login"))
-            )
-        except TimeoutException:
-            logger.log(
-                "Login button not found, navigating to fallback URL",
-                status=logger.Status.WARNING,
-            )
-            fallback_url = self.construct_sign_in_url(course_url)
-            self.driver.get(fallback_url)
-        else:
-            login_element.click()
-
-    def login(self, email):
-        logger.log("Logging in", status=logger.Status.INFO)
-        # Cloudflare bypass
-        if check_element_exists(self, By.ID, "challenge-stage"):
-            self = bypass_cloudflare(self)
-
-        # Wait for the login form to appear
-        _ = WebDriverWait(self.driver, timeout=15).until(
-            EC.presence_of_element_located((By.TAG_NAME, "body"))
-        )
-        email_element = WebDriverWait(self.driver, self.global_timeout).until(
-            EC.presence_of_element_located((By.ID, "email"))
-        )
-        access_button = WebDriverWait(self.driver, self.global_timeout).until(
-            EC.presence_of_element_located((By.ID, "otp-login-btn"))
-        )
-        logger.log("Filling in login form", status=logger.Status.DEBUG)
-        email_element.click()
-        email_element.clear()
-        email_element.send_keys(email)
-        access_button.click()
-
-        # Wait for the OTP form
-        logger.log("Waiting for OTP code", status=logger.Status.DEBUG)
-        self = handle_otp_login(self)
-        logger.log("Logged in, switching to course page", status=logger.Status.INFO)
-        time.sleep(3)
 
     def pick_course_downloader(self, course_url):
         # Check if we are already on the course page
@@ -563,8 +516,12 @@ class TeachableDownloader:
 
             try:
                 logger.log("Downloading attachments", status=logger.Status.INFO)
-                self.download_attachments(
-                    video["link"], video["title"], video["idx"], video["download_path"]
+                self = download_attachments(
+                    self,
+                    video["link"],
+                    video["title"],
+                    video["idx"],
+                    video["download_path"],
                 )
             except Exception as e:
                 logger.log(
@@ -577,8 +534,8 @@ class TeachableDownloader:
                     "Trying to download video as an attachment",
                     status=logger.Status.DEBUG,
                 )
-                if self.download_video_file(
-                    video["title"], video["idx"], video["download_path"]
+                if download_video_file(
+                    self, video["title"], video["idx"], video["download_path"]
                 ):
                     continue
 
@@ -610,8 +567,12 @@ class TeachableDownloader:
 
                     try:
                         logger.log("Downloading subtitle", status=logger.Status.INFO)
-                        self.download_subtitle(
-                            link, video_title, video["idx"], video["download_path"]
+                        self = download_subtitle(
+                            self,
+                            link,
+                            video_title,
+                            video["idx"],
+                            video["download_path"],
                         )
                     except Exception as e:
                         logger.log(
@@ -621,8 +582,12 @@ class TeachableDownloader:
 
                     try:
                         logger.log("Downloading video", status=logger.Status.INFO)
-                        self.download_video(
-                            link, video_title, video["idx"], video["download_path"]
+                        self = download_video(
+                            self,
+                            link,
+                            video_title,
+                            video["idx"],
+                            video["download_path"],
                         )
                     except Exception as e:
                         logger.log(
@@ -662,301 +627,6 @@ class TeachableDownloader:
             complete_button.click()
             logger.log("Completed lecture", status=logger.Status.INFO)
             time.sleep(3)
-
-    def _log_subtitle_state(self, info):
-        subs = info.get("subtitles") or info.get("automatic_captions") or {}
-        if not subs:
-            logger.log(
-                "No subtitles metadata present for this video.",
-                status=logger.Status.INFO,
-            )
-        else:
-            logger.log(
-                "Subtitles metadata keys: %s" + str(subs.keys()),
-                status=logger.Status.INFO,
-            )
-
-    def download_video(self, link, title, video_index, output_path):
-        # Check if ffmpeg is available
-        ffmpeg_path = check_ffmpeg_available()
-        if not ffmpeg_path:
-            install_ffmpeg()
-
-        ydl_opts: yt_dlp._Params = {
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "merge_output_format": "mp4",
-            "postprocessors": [
-                {
-                    "key": "FFmpegVideoConvertor",
-                    "preferedformat": "mp4",
-                },
-                {
-                    "key": "FFmpegMetadata",
-                },
-            ],
-            "hls_use_mpegts": True,
-            "writesubtitles": True,
-            "subtitleslangs": ["all"],
-            "subtitlesformat": "srt",
-            "http_headers": self.headers,
-            "concurrent_fragment_downloads": 15,
-            "outtmpl": os.path.join(
-                output_path, "{:02d}-{}.mp4".format(int(video_index), str(title))
-            ),
-            "verbose": True if self.verbose > 0 else False,
-        }
-
-        # If ffmpeg is in a specific path, add it to the options
-        if ffmpeg_path != "ffmpeg":
-            ydl_opts["ffmpeg_location"] = ffmpeg_path
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Use extract_info to get info_dict first (so we can check subtitles)
-                try:
-                    info = ydl.extract_info(link, download=False)
-                except Exception as ex_info:
-                    logger.log(
-                        "extract_info failed (will try direct download). Error: %s"
-                        + str(ex_info),
-                        status=logger.Status.ERROR,
-                    )
-                    info = None
-
-                if info:
-                    self._log_subtitle_state(info)
-                # Now perform download (wrapped so we can catch exceptions)
-                try:
-                    ydl.download([link])
-                except Exception as e:
-                    # If there's an HLS live fragment issue, log extra context
-                    logger.log(
-                        "Could not download video '%s' (link=%s). Exception: %s"
-                        + str(title)
-                        + str(link)
-                        + str(e),
-                        status=logger.Status.ERROR,
-                    )
-
-                    # Provide a helpful hint in the log about trying CLI fallback
-                    logger.log(
-                        "If you see 'Live HLS streams are not supported by the native downloader' warnings, "
-                        "try re-running with CLI flags: --downloader ffmpeg --hls-use-mpegts or use subprocess fallback.",
-                        status=logger.Status.WARNING,
-                    )
-                    # Re-raise if you want caller to notice; otherwise swallow after logging
-                    raise
-
-        except Exception as e_outer:
-            # Final catch-all for unexpected errors (keep it informative)
-            logger.log(
-                "download_video failed for title=%s index=%s: %s"
-                + (title)
-                + (video_index)
-                + (e_outer),
-                status=logger.Status.ERROR,
-            )
-            # Re-raise or return False depending on your codebase style
-            raise
-
-    # This function is needed because yt-dlp subtitle downloader is not working
-    def download_subtitle(self, link, title, video_index, output_path):
-        # Check if ffmpeg is available
-        ffmpeg_path = check_ffmpeg_available()
-        if not ffmpeg_path:
-            logger.log("❌ FFmpeg not found!", status=logger.Status.ERROR)
-            logger.log(
-                "Install ffmpeg or put it in ./bin/ffmpeg.exe",
-                status=logger.Status.ERROR,
-            )
-            logger.log(
-                "Download from: https://www.gyan.dev/ffmpeg/builds/",
-                status=logger.Status.ERROR,
-            )
-            sys.exit(1)
-
-        ydl_opts: yt_dlp._Params = {
-            "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-            "merge_output_format": "mp4",
-            "postprocessors": [
-                {
-                    "key": "FFmpegVideoConvertor",
-                    "preferedformat": "mp4",
-                },
-                {
-                    "key": "FFmpegMetadata",
-                },
-            ],
-            "http_headers": self.headers,
-            "allsubtitles": True,
-            "subtitleslangs": ["all"],
-            "concurrent_fragment_downloads": 10,
-            "writesubtitles": True,
-            "outtmpl": os.path.join(str(output_path), str(title)),
-            "verbose": True if self.verbose > 0 else False,
-        }
-
-        # Se ffmpeg è in una path specifica, aggiungila alle opzioni
-        if ffmpeg_path != "ffmpeg":
-            ydl_opts["ffmpeg_location"] = ffmpeg_path
-
-        info_json: Optional[Mapping[str, Any]] = None
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(link, download=False)
-                info_json = ydl.sanitize_info(info)
-        except Exception as e:
-            logger.log(f"Could not download subtitle: {title} cause: {e}")
-
-        subtitle_links = {}
-        if (
-            info_json
-            and isinstance(info_json, dict)
-            and "requested_subtitles" in info_json
-        ):
-            requested = cast(Dict[str, Any], info_json["requested_subtitles"])
-            for lang, sub_info in requested.items():
-                subtitle_links[lang] = {"url": sub_info["url"], "ext": sub_info["ext"]}
-
-        # Print the subtitle links and language names
-        req = None
-        for lang, sub in subtitle_links.items():
-            subtitle_filename = "{:02d}-{}.{}.{}".format(
-                video_index, title, lang, sub["ext"]
-            )
-            file_path = os.path.join(output_path, subtitle_filename)
-            if os.path.isfile(file_path):
-                logger.log(
-                    "Skipping existing subtitle: " + subtitle_filename,
-                    status=logger.Status.INFO,
-                )
-            else:
-                base_url = sub["url"]
-                try:
-                    req = requests.get(sub["url"], headers=self.headers)
-                except Exception as e:
-                    logger.log(
-                        f"Could not download subtitle: {title} cause: {e}",
-                        status=logger.Status.WARNING,
-                    )
-                relative_path = (
-                    req.text.split("\n")[5]
-                    if isinstance(req, requests.Response)
-                    else ""
-                )
-                full_url = urljoin(base_url, relative_path)
-                try:
-                    response = requests.get(full_url, headers=self.headers)
-                    with open(file_path, "wb") as f:
-                        f.write(response.content)
-                except Exception as e:
-                    logger.log(
-                        f"Could not download subtitle: {title} cause: {e}",
-                        status=logger.Status.WARNING,
-                    )
-                logger.log(
-                    "Downloaded subtitle: " + subtitle_filename,
-                    status=logger.Status.INFO,
-                )
-
-    def download_video_file(self, title, video_index, output_path, timeout=-1):
-        video_title = "{:02d}-{}".format(video_index, title)
-
-        # Grab the video attachments type video
-        video_attachment = self.driver.find_element(
-            By.CLASS_NAME, "lecture-attachment-type-video"
-        )
-
-        if not video_attachment:
-            logger.log(
-                f"No video attachment found for lecture: {title}",
-                status=logger.Status.DEBUG,
-            )
-            return False
-
-        video_link = video_attachment.find_element(By.TAG_NAME, "a")
-
-        if not video_link:
-            logger.log(
-                f"No video link found for lecture: {title}", status=logger.Status.DEBUG
-            )
-            return False
-
-        # Set the download directory for this file
-        self.driver.execute_cdp_cmd(
-            "Page.setDownloadBehavior",
-            {"behavior": "allow", "downloadPath": output_path},
-        )
-        # Get list of files before download
-        files_before_download = set(os.listdir(output_path))
-
-        # Click the link to trigger download
-        video_link.click()
-
-        # Wait for download to complete
-        start_time = time.time()
-        while True:
-            files_after_download = set(os.listdir(output_path))
-
-            # Find new files
-            new_files = files_after_download - files_before_download
-
-            if len(new_files) == 1 and not list(new_files)[0].endswith(".crdownload"):
-                break
-
-            if timeout > 0 and (time.time() - start_time) > timeout:
-                logger.log(
-                    f"Download timeout for lecture: {title}",
-                    status=logger.Status.WARNING,
-                )
-                return False
-
-            time.sleep(1)
-
-        latest_file = os.path.join(output_path, list(new_files)[0])
-
-        # Determine the file extension
-        _, extension = os.path.splitext(latest_file)
-
-        # Create the new filename
-        new_filename = f"{video_title}{extension}"
-        new_filepath = os.path.join(output_path, new_filename)
-
-        # Rename the file
-        os.rename(latest_file, new_filepath)
-        logger.log(f"Downloaded video file {new_filename}", status=logger.Status.INFO)
-        return True
-
-    def download_attachments(self, link, title, video_index, output_path):
-        video_title = "{:02d}-{}".format(video_index, title)
-
-        # Grab the video attachments type file
-        video_attachments = self.driver.find_elements(
-            By.CLASS_NAME, "lecture-attachment-type-file"
-        )
-        # Get all links from the video attachments
-
-        if video_attachments:
-            video_links = video_attachments[0].find_elements(By.TAG_NAME, "a")
-
-            output_path = os.path.join(output_path, video_title)
-            os.makedirs(output_path, exist_ok=True)
-
-            # Get href attribute from the first link
-            if video_links:
-                for video_link in video_links:
-                    link = video_link.get_attribute("href")
-                    file_name = video_link.text
-                    logger.log(
-                        "Downloading attachment: " + file_name + " for video: " + title,
-                        status=logger.Status.INFO,
-                    )
-                    # Download file and save the file in output_path directory
-                    wget.download(link, out=output_path)
-        else:
-            logger.log(
-                "No attachments found for video: " + title, status=logger.Status.WARNING
-            )
 
     def save_webpage_as_html(self, title, video_index, output_path):
         output_file = os.path.join(

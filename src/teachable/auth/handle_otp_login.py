@@ -43,7 +43,7 @@ def input_code(self: "TeachableDownloader") -> TeachableDownloader:
     return self
 
 
-def handle_otp_login(self):
+def handle_otp_login(self: "TeachableDownloader"):
     """Controls the input of the OTP, the click on Verify and the retry in case of invalid code."""
 
     # Consts
