@@ -715,6 +715,19 @@ class TeachableDownloader:
             logger.log("Completed lecture", status=logger.Status.INFO)
             time.sleep(3)
 
+    def _log_subtitle_state(self, info):
+        subs = info.get("subtitles") or info.get("automatic_captions") or {}
+        if not subs:
+            logger.log(
+                "No subtitles metadata present for this video.",
+                status=logger.Status.INFO,
+            )
+        else:
+            logger.log(
+                "Subtitles metadata keys: %s" + str(subs.keys()),
+                status=logger.Status.INFO,
+            )
+
     def download_video(self, link, title, video_index, output_path):
         # Check if ffmpeg is available
         ffmpeg_path = check_ffmpeg_available()
@@ -733,6 +746,10 @@ class TeachableDownloader:
                     "key": "FFmpegMetadata",
                 },
             ],
+            "hls_use_mpegts": True,
+            "writesubtitles": True,
+            "subtitleslangs": ["all"],
+            "subtitlesformat": "srt",
             "http_headers": self.headers,
             "concurrent_fragment_downloads": 15,
             "outtmpl": os.path.join(
@@ -747,9 +764,52 @@ class TeachableDownloader:
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([link])
-        except Exception as e:
-            logger.log(f"Could not download video: {title} cause: {e}")
+                # Use extract_info to get info_dict first (so we can check subtitles)
+                try:
+                    info = ydl.extract_info(link, download=False)
+                except Exception as ex_info:
+                    logger.log(
+                        "extract_info failed (will try direct download). Error: %s"
+                        + str(ex_info),
+                        status=logger.Status.ERROR,
+                    )
+                    info = None
+
+                if info:
+                    self._log_subtitle_state(info)
+                # Now perform download (wrapped so we can catch exceptions)
+                try:
+                    ydl.download([link])
+                except Exception as e:
+                    # If there's an HLS live fragment issue, log extra context
+                    logger.log(
+                        "Could not download video '%s' (link=%s). Exception: %s"
+                        + str(title)
+                        + str(link)
+                        + str(e),
+                        status=logger.Status.ERROR,
+                    )
+
+                    # Provide a helpful hint in the log about trying CLI fallback
+                    logger.log(
+                        "If you see 'Live HLS streams are not supported by the native downloader' warnings, "
+                        "try re-running with CLI flags: --downloader ffmpeg --hls-use-mpegts or use subprocess fallback.",
+                        status=logger.Status.WARNING,
+                    )
+                    # Re-raise if you want caller to notice; otherwise swallow after logging
+                    raise
+
+        except Exception as e_outer:
+            # Final catch-all for unexpected errors (keep it informative)
+            logger.log(
+                "download_video failed for title=%s index=%s: %s"
+                + (title)
+                + (video_index)
+                + (e_outer),
+                status=logger.Status.ERROR,
+            )
+            # Re-raise or return False depending on your codebase style
+            raise
 
     # This function is needed because yt-dlp subtitle downloader is not working
     def download_subtitle(self, link, title, video_index, output_path):

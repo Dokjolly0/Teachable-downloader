@@ -1,4 +1,5 @@
 import os
+import re
 
 import src.helpers.logger as logger
 
@@ -70,3 +71,16 @@ def read_urls_from_file(file_path):
         logger.log(f"No URLs found in file: {file_path}", logger.Status.WARNING)
 
     return urls
+
+
+def sanitize_for_filename(s: str, max_len=200):
+    # Keep basic chars, replace spaces with hyphens, trim length
+    if not s:
+        return "untitled"
+    s = str(s)
+    s = re.sub(r'[\/:*?"<>|]', "-", s)  # remove illegal FS chars
+    s = re.sub(r"\s+", " ", s).strip()
+    s = s.replace(" ", "-")
+    if len(s) > max_len:
+        s = s[:max_len]
+    return s

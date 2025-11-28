@@ -9,13 +9,16 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
 import src.helpers.logger as logger
+from src.helpers.aks_input_alert import ask_input_modal
 
 if TYPE_CHECKING:
     from src.teachable.teachable_downloader import TeachableDownloader
 
 
 def input_code(self: "TeachableDownloader") -> TeachableDownloader:
-    code = input("Insert OTP code: ")
+    code = ask_input_modal(
+        self, title="Insert the OTP code.", placeholder="Insert OTP code..."
+    )
     codes_str = [str(c) for c in code]
     opt_code_div = WebDriverWait(self.driver, self.global_timeout).until(
         EC.presence_of_element_located((By.ID, "otp-code"))
