@@ -11,14 +11,13 @@ startup_arguments: Optional["StartupArguments"] = None
 def check_required_args(args: StartupArguments):
     if args.email:
         return True
-    elif args.manual_login_url:
-        return True
-    logger.log(
-        "Required arguments are missing. \nUse --email and --password or --manual-login-url",
-        status=logger.Status.ERROR,
-        verbose_level=0,
-    )
-    return False
+    else:
+        logger.log(
+            "Email are required",
+            status=logger.Status.ERROR,
+            verbose_level=0,
+        )
+        return False
 
 
 def get_cached_startup_arguments():
@@ -36,7 +35,6 @@ def set_startup_arguments(args):
                 verbose_level=args.verbose_level,
                 complete_lecture=args.complete_lecture,
                 login_url=args.login_url,
-                manual_login_url=args.manual_login_url,
                 file_urls_path=args.file_urls_path,
                 user_agent=args.user_agent,
                 selenium_driver_timeout=args.selenium_driver_timeout,
@@ -82,11 +80,6 @@ def get_startup_arguments() -> StartupArguments:
             "--login-url",
             required=False,
             help="(Optional) URL to teachable SSO login page",
-        )
-        parser.add_argument(
-            "--manual-login-url",
-            required=False,
-            help="Login manually and start downloading when this url is reached",
         )
         parser.add_argument(
             "-f",

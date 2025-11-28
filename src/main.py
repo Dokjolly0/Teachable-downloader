@@ -13,9 +13,7 @@ if __name__ == "__main__":
     if args.file_urls_path:
         urls = read_urls_from_file(args.file_urls_path)
         try:
-            downloader.run_batch(
-                urls, args.email, args.password, args.login_url, args.manual_login_url
-            )
+            downloader.run_batch(urls, args.email, args.login_url)
             downloader.clean_up()
             sys.exit(0)
         except KeyboardInterrupt:
@@ -35,9 +33,7 @@ if __name__ == "__main__":
             downloader.run(
                 course_url=args.url,
                 email=args.email,
-                password=args.password,
                 login_url=args.login_url,
-                manual_login_url=args.manual_login_url,
             )
             downloader.clean_up()
             sys.exit(0)

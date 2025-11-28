@@ -15,12 +15,12 @@ import selenium.webdriver.support.expected_conditions as EC
 import wget
 import yt_dlp
 from selenium.common import TimeoutException
-from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 from seleniumbase import Driver
 
 import src.helpers.logger as logger
+from src.helpers.check_element_exists import check_element_exists
 from src.helpers.exception import save_debug_artifacts
 from src.helpers.ffmpeg import check_ffmpeg_available, install_ffmpeg
 from src.helpers.file_helper import (
@@ -45,28 +45,7 @@ class TeachableDownloader:
         self._complete_lecture = args.complete_lecture
         self.global_timeout = args.selenium_driver_timeout
 
-    def check_elem_exists(self, by, selector, timeout):
-        """
-        Check if element exists
-        1. by: By.ID, By.CLASS_NAME, By.XPATH, etc.
-        2. selector: the selector to find the element
-        3. timeout: time to wait for the element
-        4. return: True if element exists, False otherwise
-        """
-        try:
-            WebDriverWait(self.driver, timeout=self.global_timeout).until(
-                EC.presence_of_element_located((by, selector))
-            )
-        except NoSuchElementException:
-            return False
-        except TimeoutException:
-            return False
-        except Exception:
-            return False
-        else:
-            return True  # If try not raise exception
-
-    def run(self, course_url, email, password, login_url, manual_login_url):
+    def run(self, course_url, email, login_url):
         """
         Run the downloader
         1. course_url: URL of the course
@@ -78,38 +57,26 @@ class TeachableDownloader:
         """
         logger.log("Starting login", status=logger.Status.INFO)
 
-        if manual_login_url is None:
-            # Check if login_url is not set
-            if login_url is None:
-                try:
-                    self.find_login(course_url)
-                except Exception as e:
-                    logger.log(f"Could not find login: {e}", status=logger.Status.ERROR)
-            else:
-                self.driver.get(login_url)
-
+        # Check if login_url is not set
+        if login_url is None:
             try:
-                self.login(email)
+                self.find_login(course_url)
             except Exception as e:
-                tb = traceback.format_exc()
-                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
-                # salva artefatti per debugging
-                try:
-                    save_debug_artifacts(self.driver, prefix="login_failure")
-                except Exception:
-                    pass
-                return
+                logger.log(f"Could not find login: {e}", status=logger.Status.ERROR)
         else:
-            self.driver.get(course_url)
-            while self.driver.current_url != manual_login_url:
-                time.sleep(3)
-                logger.log(
-                    "Waiting for user to navigate to url: " + manual_login_url,
-                    status=logger.Status.INFO,
-                )
-                logger.log(
-                    "Current url: " + self.driver.current_url, status=logger.Status.INFO
-                )
+            self.driver.get(login_url)
+
+        try:
+            self.login(email)
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
+            # salva artefatti per debugging
+            try:
+                save_debug_artifacts(self.driver, prefix="login_failure")
+            except Exception:
+                pass
+            return
 
         logger.log(
             "Starting download of course: " + course_url, status=logger.Status.INFO
@@ -122,7 +89,7 @@ class TeachableDownloader:
                 status=logger.Status.ERROR,
             )
 
-    def run_batch(self, url_array, email, password, login_url, man_login_url):
+    def run_batch(self, url_array, email, login_url):
         """
         This method handles batch downloading of courses. It navigates to the given URLs, logs in if necessary,
         and initiates the download process for each course.
@@ -131,8 +98,6 @@ class TeachableDownloader:
             An array of URLs pointing to the courses that need to be downloaded.
         :param email: str
             The email address used to log in to the platform.
-        :param password: str
-            The password associated with the provided email address.
         :param login_url: str
             The URL of the login page. If not provided, manual login is assumed.
         :param man_login_url: str
@@ -143,36 +108,23 @@ class TeachableDownloader:
         """
         logger.log("Starting login", status=logger.Status.INFO)
 
-        if man_login_url is None:
-            # Check if login_url is not set
-            if login_url is not None:
-                self.driver.get(login_url)
-            else:
-                logger.log("Login url is not set", status=logger.Status.INFO)
-                return
-
-            try:
-                self.login(email)
-            except Exception as e:
-                tb = traceback.format_exc()
-                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
-                # salva artefatti per debugging
-                try:
-                    save_debug_artifacts(self.driver, prefix="login_failure")
-                except Exception:
-                    pass
-                return
+        if login_url is not None:
+            self.driver.get(login_url)
         else:
-            self.driver.get(url_array[0])
-            while self.driver.current_url != man_login_url:
-                time.sleep(3)
-                logger.log(
-                    "Waiting for user to navigate to url: " + man_login_url,
-                    status=logger.Status.INFO,
-                )
-                logger.log(
-                    "Current url: " + self.driver.current_url, status=logger.Status.INFO
-                )
+            logger.log("Login url is not set", status=logger.Status.INFO)
+            return
+
+        try:
+            self.login(email)
+        except Exception as e:
+            tb = traceback.format_exc()
+            logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
+            # salva artefatti per debugging
+            try:
+                save_debug_artifacts(self.driver, prefix="login_failure")
+            except Exception:
+                pass
+            return
 
         logger.log("Running batch download of courses ", status=logger.Status.INFO)
         for url in url_array:
@@ -215,13 +167,11 @@ class TeachableDownloader:
     def login(self, email):
         logger.log("Logging in", status=logger.Status.INFO)
         # Cloudflare bypass
-        if self.check_elem_exists(
-            By.ID, "challenge-stage", timeout=self.global_timeout
-        ):
+        if check_element_exists(self, By.ID, "challenge-stage"):
             self = bypass_cloudflare(self)
 
         # Wait for the login form to appear
-        WebDriverWait(self.driver, timeout=15).until(
+        _ = WebDriverWait(self.driver, timeout=15).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
         email_element = WebDriverWait(self.driver, self.global_timeout).until(
@@ -247,9 +197,7 @@ class TeachableDownloader:
         if not self.driver.current_url == course_url:
             logger.log("Switching to course page", status=logger.Status.INFO)
             self.driver.get(course_url)
-            if self.check_elem_exists(
-                By.ID, "challenge-stage", timeout=self.global_timeout
-            ):
+            if check_element_exists(self, By.ID, "challenge-stage"):
                 self = bypass_cloudflare(self)
 
         WebDriverWait(self.driver, timeout=self.global_timeout).until(

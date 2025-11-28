@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from selenium.webdriver.common.by import By
 
 import src.helpers.logger as logger
+from src.helpers.check_element_exists import check_element_exists
 
 if TYPE_CHECKING:
     from src.teachable.teachable_downloader import TeachableDownloader
@@ -16,9 +17,7 @@ def bypass_cloudflare(teachable: "TeachableDownloader") -> TeachableDownloader:
         return teachable
     logger.log("Bypassing cloudflare", status=logger.Status.INFO)
     time.sleep(1)
-    if teachable.check_elem_exists(
-        By.ID, "challenge-stage", timeout=teachable.global_timeout
-    ):
+    if check_element_exists(teachable, By.ID, "challenge-stage"):
         try:
             teachable.driver.find_element(
                 By.ID, "challenge-stage"
