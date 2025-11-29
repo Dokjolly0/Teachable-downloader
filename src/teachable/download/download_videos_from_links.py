@@ -3,6 +3,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 from typing import TYPE_CHECKING
 
 import selenium.webdriver.support.expected_conditions as EC
@@ -10,52 +11,15 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 
 import src.helpers.logger as logger
+from src.teachable.download.download_video import download_with_yt_dlp
 from src.teachable.download.download_video_file import download_video_file
 
 if TYPE_CHECKING:
     from src.teachable.teachable_downloader import TeachableDownloader
 
 
-# Helper: manage per-course state file to persist completed lectures across runs/crashes
-def _load_course_state(course_root: str) -> dict:
-    """Load or create a .download_state.json file in the course root.
-    The file contains a dict with a 'completed' list of unique ids representing finished lectures.
-    """
-    state_file = os.path.join(course_root, ".download_state.json")
-    if os.path.isfile(state_file):
-        try:
-            with open(state_file, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.log(
-                f"Could not read state file {state_file}: {e}",
-                status=logger.Status.WARNING,
-            )
-            return {"completed": []}
-    else:
-        return {"completed": []}
-
-
-def _save_course_state(course_root: str, state: dict) -> None:
-    """Persist the state file atomically."""
-    state_file = os.path.join(course_root, ".download_state.json")
-    tmp = state_file + ".tmp"
-    try:
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(state, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, state_file)
-    except Exception as e:
-        logger.log(
-            f"Could not save state file {state_file}: {e}", status=logger.Status.WARNING
-        )
-
-
 def _cleanup_leftovers_for_target(target_dir: str, expected_basename: str) -> None:
-    """Remove common temporary download leftovers that may block resume.
-    This function deletes files like {expected_basename}.crdownload, *.part, *.part-* etc.
-    """
     try:
-        # Look for temp patterns in target directory
         patterns = [
             f"{expected_basename}.*.crdownload",
             f"{expected_basename}.crdownload",
@@ -74,37 +38,24 @@ def _cleanup_leftovers_for_target(target_dir: str, expected_basename: str) -> No
                 except Exception as e:
                     logger.log(
                         f"Could not remove temp file {p}: {e}",
-                        status=logger.Status.WARNING,
+                        status=logger.Status.DEBUG,
                     )
     except Exception as e:
         logger.log(f"Leftover cleanup error: {e}", status=logger.Status.DEBUG)
 
 
 def _make_video_id(video: dict) -> str:
-    """Create a stable ID for a video entry to store in state file.
-    Use download_path relative to course root plus idx and sanitized title.
-    """
-    # download_path is typically course_root/<chapter folder>
     download_path = video.get("download_path", "")
     idx = video.get("idx")
     title = video.get("title", "")
-    # Use OS-safe separators
     return f"{os.path.normpath(download_path)}|{idx}|{title}"
 
 
 def download_videos_from_links(
     self: "TeachableDownloader", video_list
 ) -> "TeachableDownloader":
-    """Version optimized for faster downloads with resume support.
-
-    This function:
-    - Maintains a per-course state file (.download_state.json) to mark completed lectures.
-    - Skips videos that already exist as final files.
-    - Cleans leftover temporary files before attempting a download.
-    """
     original_window = self.driver.current_window_handle
 
-    # Derive course root from first video's download_path (safe fallback if empty)
     if video_list and len(video_list) > 0:
         first_download_path = video_list[0].get("download_path", "")
         course_root = (
@@ -113,7 +64,16 @@ def download_videos_from_links(
     else:
         course_root = "."
 
-    course_state = _load_course_state(course_root)
+    state_file = os.path.join(course_root, ".download_state.json")
+    try:
+        if os.path.isfile(state_file):
+            with open(state_file, "r", encoding="utf-8") as f:
+                course_state = json.load(f)
+        else:
+            course_state = {"completed": []}
+    except Exception:
+        course_state = {"completed": []}
+
     completed = set(course_state.get("completed", []))
 
     for video in video_list:
@@ -123,7 +83,6 @@ def download_videos_from_links(
         )
         download_path = video.get("download_path", ".")
 
-        # Check if marked as completed in state file
         if vid_id in completed:
             logger.log(
                 f"Skipping already completed lecture (state): {video['title']}",
@@ -131,8 +90,6 @@ def download_videos_from_links(
             )
             continue
 
-        # If final file already exists on disk, mark completed and skip
-        # We check common extensions (mp4) and any other typical ones if needed.
         final_mp4 = os.path.join(download_path, f"{expected_basename}.mp4")
         if os.path.isfile(final_mp4) and os.path.getsize(final_mp4) > 0:
             logger.log(
@@ -140,118 +97,313 @@ def download_videos_from_links(
                 status=logger.Status.INFO,
             )
             completed.add(vid_id)
-            _save_course_state(course_root, {"completed": list(completed)})
+            try:
+                with open(state_file, "w", encoding="utf-8") as f:
+                    json.dump(
+                        {"completed": list(completed)}, f, ensure_ascii=False, indent=2
+                    )
+            except Exception:
+                pass
             continue
 
         try:
             logger.log(f"Processing: {video['title']}", status=logger.Status.INFO)
-            # Clean leftover temporary files that might block download
             _cleanup_leftovers_for_target(download_path, expected_basename)
 
-            # Open video in new tab
+            # Open lecture in new tab
             self.driver.execute_script(f"window.open('{video['link']}', '_blank');")
-            new_window = [
-                w for w in self.driver.window_handles if w != original_window
-            ][0]
-            self.driver.switch_to.window(new_window)
-            # Wait for page to load
-            _ = WebDriverWait(self.driver, 5).until(
-                EC.presence_of_element_located((By.TAG_NAME, "body"))
-            )
-            # Process video in the new tab
-            _process_video_in_tab(self, video)
-
-            # After processing, check if the file exists now and mark completed if so
-            if os.path.isfile(final_mp4) and os.path.getsize(final_mp4) > 0:
+            new_handles = [
+                h for h in self.driver.window_handles if h != original_window
+            ]
+            if not new_handles:
                 logger.log(
-                    f"Marking lecture as completed: {video['title']}",
-                    status=logger.Status.INFO,
-                )
-                completed.add(vid_id)
-                _save_course_state(course_root, {"completed": list(completed)})
-            else:
-                logger.log(
-                    f"Lecture not present after processing: {video['title']}",
+                    f"Could not open new tab for lecture: {video['title']}",
                     status=logger.Status.WARNING,
                 )
+                continue
+            new_window = new_handles[-1]
+            self.driver.switch_to.window(new_window)
+            WebDriverWait(self.driver, 8).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
+            )
+
+            # Save page HTML (already handled elsewhere) then try to find video links by multiple strategies
+            # Strategy cascade: attachments -> anchors with m3u8/mp4 -> video/source tags -> iframe -> __NEXT_DATA__
+            found_link = None
+
+            # 1) Try direct attachment element (existing approach)
+            try:
+                if download_video_file(
+                    self, video["title"], video["idx"], video["download_path"]
+                ):
+                    # If this succeeded we consider it done (file will be on disk)
+                    if os.path.isfile(final_mp4) and os.path.getsize(final_mp4) > 0:
+                        logger.log(
+                            f"Marking lecture as completed (attachment): {video['title']}",
+                            status=logger.Status.INFO,
+                        )
+                        completed.add(vid_id)
+                        with open(state_file, "w", encoding="utf-8") as f:
+                            json.dump(
+                                {"completed": list(completed)},
+                                f,
+                                ensure_ascii=False,
+                                indent=2,
+                            )
+                        # close tab and continue
+                        self.driver.close()
+                        self.driver.switch_to.window(original_window)
+                        continue
+            except Exception as e:
+                logger.log(
+                    f"Attachment method errored: {e}", status=logger.Status.DEBUG
+                )
+
+            # 2) Look for anchor tags with m3u8 or .mp4
+            try:
+                anchors = self.driver.find_elements(By.TAG_NAME, "a")
+                for a in anchors:
+                    try:
+                        href = a.get_attribute("href") or ""
+                        if ".m3u8" in href or href.endswith(".mp4"):
+                            found_link = href
+                            logger.log(
+                                f"Found direct anchor link: {href}",
+                                status=logger.Status.DEBUG,
+                            )
+                            break
+                    except Exception:
+                        continue
+            except Exception:
+                pass
+
+            # 3) Look for <video> and <source> tags
+            if not found_link:
+                try:
+                    videos = self.driver.find_elements(By.TAG_NAME, "video")
+                    for v in videos:
+                        try:
+                            src = v.get_attribute("src")
+                            if src and (".m3u8" in src or src.endswith(".mp4")):
+                                found_link = src
+                                logger.log(
+                                    f"Found video[src]: {src}",
+                                    status=logger.Status.DEBUG,
+                                )
+                                break
+                            # try source children
+                            sources = v.find_elements(By.TAG_NAME, "source")
+                            for s in sources:
+                                ssrc = (
+                                    s.get_attribute("src")
+                                    or s.get_attribute("data-src")
+                                    or ""
+                                )
+                                if ssrc and (".m3u8" in ssrc or ssrc.endswith(".mp4")):
+                                    found_link = ssrc
+                                    logger.log(
+                                        f"Found source[src]: {ssrc}",
+                                        status=logger.Status.DEBUG,
+                                    )
+                                    break
+                            if found_link:
+                                break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            # 4) Look into iframes (inspect src or __NEXT_DATA__ inside)
+            if not found_link:
+                try:
+                    iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
+                    for i, iframe in enumerate(iframes):
+                        try:
+                            src = iframe.get_attribute("src") or ""
+                            if src and (".m3u8" in src or src.endswith(".mp4")):
+                                found_link = src
+                                logger.log(
+                                    f"Found iframe src with direct link: {src}",
+                                    status=logger.Status.DEBUG,
+                                )
+                                break
+                            # switch into iframe and look for __NEXT_DATA__ or sources
+                            self.driver.switch_to.frame(iframe)
+                            # try __NEXT_DATA__
+                            try:
+                                script = self.driver.find_element(
+                                    By.ID, "__NEXT_DATA__"
+                                )
+                                if script:
+                                    text = script.get_attribute("innerHTML") or ""
+                                    try:
+                                        import json as _json
+
+                                        parsed = _json.loads(text)
+                                        # try common path to media assets
+                                        ma = parsed.get("props", {}).get(
+                                            "pageProps", {}
+                                        ).get("applicationData", {}).get(
+                                            "mediaAssets"
+                                        ) or parsed.get("props", {}).get(
+                                            "pageProps", {}
+                                        ).get("video", {}).get("mediaAssets")
+                                        if ma and isinstance(ma, list) and len(ma) > 0:
+                                            candidate = (
+                                                ma[0].get("urlEncrypted")
+                                                or ma[0].get("url")
+                                                or ""
+                                            )
+                                            if candidate:
+                                                found_link = candidate
+                                                logger.log(
+                                                    "Found mediaAsset url in __NEXT_DATA__",
+                                                    status=logger.Status.DEBUG,
+                                                )
+                                                # leave iframe
+                                                self.driver.switch_to.default_content()
+                                                break
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+
+                            # search sources inside iframe
+                            try:
+                                vids = self.driver.find_elements(By.TAG_NAME, "video")
+                                for vv in vids:
+                                    try:
+                                        vsrc = vv.get_attribute("src") or ""
+                                        if vsrc and (
+                                            ".m3u8" in vsrc or vsrc.endswith(".mp4")
+                                        ):
+                                            found_link = vsrc
+                                            break
+                                        s_srcs = vv.find_elements(By.TAG_NAME, "source")
+                                        for ss in s_srcs:
+                                            ssrc = ss.get_attribute("src") or ""
+                                            if ssrc and (
+                                                ".m3u8" in ssrc or ssrc.endswith(".mp4")
+                                            ):
+                                                found_link = ssrc
+                                                break
+                                        if found_link:
+                                            break
+                                    except Exception:
+                                        continue
+                                if found_link:
+                                    self.driver.switch_to.default_content()
+                                    break
+                            except Exception:
+                                pass
+                        except Exception:
+                            # ensure we switch back anyway
+                            try:
+                                self.driver.switch_to.default_content()
+                            except Exception:
+                                pass
+                            continue
+                    # ensure default_content
+                    try:
+                        self.driver.switch_to.default_content()
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+
+            # 5) Try to parse JSON inside scripts in the main document (fallback)
+            if not found_link:
+                try:
+                    scripts = self.driver.find_elements(By.TAG_NAME, "script")
+                    for s in scripts:
+                        try:
+                            text = s.get_attribute("innerHTML") or ""
+                            if "mediaAssets" in text or "m3u8" in text:
+                                # try to find an http link
+                                m = re.search(
+                                    r"https?://[^\s\"']+\.m3u8[^\s\"']*", text
+                                )
+                                if not m:
+                                    m = re.search(
+                                        r"https?://[^\s\"']+\.mp4[^\s\"']*", text
+                                    )
+                                if m:
+                                    found_link = m.group(0)
+                                    logger.log(
+                                        f"Found link in script tag: {found_link}",
+                                        status=logger.Status.DEBUG,
+                                    )
+                                    break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            # If we found a link, attempt download via yt-dlp
+            download_ok = False
+            if found_link:
+                logger.log(
+                    f"Attempting yt-dlp download for lecture '{video['title']}' using link: {found_link}",
+                    status=logger.Status.INFO,
+                )
+                try:
+                    download_ok = download_with_yt_dlp(
+                        self,
+                        found_link,
+                        video["title"],
+                        video["idx"],
+                        video["download_path"],
+                    )
+                except Exception as e:
+                    logger.log(
+                        f"yt-dlp helper raised exception: {e}",
+                        status=logger.Status.WARNING,
+                    )
+                    download_ok = False
+
+                if download_ok:
+                    logger.log(
+                        f"Marking lecture as completed (yt-dlp): {video['title']}",
+                        status=logger.Status.INFO,
+                    )
+                    completed.add(vid_id)
+                    try:
+                        with open(state_file, "w", encoding="utf-8") as f:
+                            json.dump(
+                                {"completed": list(completed)},
+                                f,
+                                ensure_ascii=False,
+                                indent=2,
+                            )
+                    except Exception:
+                        pass
+                else:
+                    logger.log(
+                        f"yt-dlp could not download lecture: {video['title']}",
+                        status=logger.Status.WARNING,
+                    )
+            else:
+                logger.log(
+                    f"No video link found for lecture: {video['title']}",
+                    status=logger.Status.DEBUG,
+                )
 
         except Exception as e:
-            logger.log(f"Failed {video['title']}: {e}", status=logger.Status.ERROR)
+            logger.log(
+                f"Failed processing lecture '{video.get('title', '')}': {e}",
+                status=logger.Status.ERROR,
+            )
         finally:
-            # Close the tab and return to original window
-            self = _safe_close_current_tab(self, original_window)
-    return self
+            # Close tab if still open and return to original
+            try:
+                if len(self.driver.window_handles) > 1:
+                    self.driver.close()
+                if original_window in self.driver.window_handles:
+                    self.driver.switch_to.window(original_window)
+                else:
+                    # fallback to first handle
+                    self.driver.switch_to.window(self.driver.window_handles[0])
+            except Exception:
+                pass
 
-
-def _process_video_in_tab(self: "TeachableDownloader", video) -> "TeachableDownloader":
-    """Process a single video tab (unchanged other than being used by resume logic)."""
-    # Save HTML
-    self.save_webpage_as_html(video["title"], video["idx"], video["download_path"])
-    try:
-        if download_video_file(
-            self, video["title"], video["idx"], video["download_path"]
-        ):
-            return self  # If direct file download succeeded
-    except Exception as e:
-        logger.log(
-            f"Attachment download failed, proceeding to iframe method: {e}",
-            status=logger.Status.WARNING,
-        )
-    # If not, use iframe method (existing implementation provided elsewhere)
-    self = _download_via_iframe_optimized(self, video)
-    return self
-
-
-def _download_via_iframe_optimized(
-    self: "TeachableDownloader", video
-) -> "TeachableDownloader":
-    """Optimized iframe download helper."""
-    # This element exists in other file; keep behavior identical.
-    video_iframes = self.driver.find_elements(
-        By.XPATH, "//iframe[starts-with(@data-testid, 'embed-player')]"
-    )
-
-    for i, iframe in enumerate(video_iframes):
-        try:
-            self.driver.switch_to.frame(iframe)
-
-            # Extract video link using JavaScript to avoid multiple DOM queries
-            link = self.driver.execute_script("""
-                try {
-                    var script = document.getElementById('__NEXT_DATA__');
-                    var data = JSON.parse(script.innerHTML);
-                    return data.props.pageProps.applicationData.mediaAssets[0].urlEncrypted;
-                } catch(e) {
-                    return null;
-                }
-            """)
-
-            if link:
-                video_title = video["title"] + (
-                    f"-{i + 1}" if len(video_iframes) > 1 else ""
-                )
-                # Download subtitle and video in parallel (the caller's implementation)
-                self._download_video_and_subs_parallel(
-                    link, video_title, video["idx"], video["download_path"]
-                )
-        except Exception as e:
-            logger.log(f"Iframe {i} failed: {e}", status=logger.Status.WARNING)
-        finally:
-            self.driver.switch_to.default_content()
-    return self
-
-
-def _safe_close_current_tab(
-    self: "TeachableDownloader", original_window
-) -> "TeachableDownloader":
-    """Safely close current tab and switch back to original (unchanged)."""
-    try:
-        if len(self.driver.window_handles) > 1:
-            self.driver.close()
-            self.driver.switch_to.window(original_window)
-    except Exception as e:
-        logger.log(f"Window switch error: {e}", status=logger.Status.WARNING)
-        # Reset to first window if possible
-        if self.driver.window_handles:
-            self.driver.switch_to.window(self.driver.window_handles[0])
     return self

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from src.teachable.teachable_downloader import TeachableDownloader
 
 
-def download_course_colossal(self: "TeachableDownloader") -> TeachableDownloader:
+def download_course_colossal(self: "TeachableDownloader") -> "TeachableDownloader":
     logger.log("Detected block course format", status=logger.Status.INFO)
     try:
         logger.log("Getting course title", status=logger.Status.INFO)
@@ -42,16 +42,21 @@ def download_course_colossal(self: "TeachableDownloader") -> TeachableDownloader
     logger.log("Saving course html", status=logger.Status.INFO)
     try:
         output_file = os.path.join(course_path, "course.html")
-        with open(output_file, "w+") as f:
+        # Open with explicit utf-8 encoding to avoid cp1252 / chmap errors on Windows
+        with open(output_file, "w+", encoding="utf-8") as f:
             f.write(self.driver.page_source)
     except Exception as e:
-        logger.log(f"Could not save course html: {e}", status=logger.Status.ERROR)
+        # More informative error message but do NOT crash the whole flow
+        logger.log(f"Could not save course html: {e}", status=logger.Status.WARNING)
 
     # Unhide all elements
     logger.log("Unhiding all elements", status=logger.Status.INFO)
-    self.driver.execute_script(
-        '[...document.querySelectorAll(".hidden")].map(e=>e.classList.remove("hidden"))'
-    )
+    try:
+        self.driver.execute_script(
+            '[...document.querySelectorAll(".hidden")].map(e=>e.classList.remove("hidden"))'
+        )
+    except Exception as e:
+        logger.log(f"Could not execute unhide script: {e}", status=logger.Status.DEBUG)
 
     chapter_idx = 1
     video_list = []
