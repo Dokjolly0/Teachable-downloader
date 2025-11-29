@@ -12,7 +12,8 @@ from seleniumbase import Driver
 import src.helpers.logger as logger
 from src.helpers.check_element_exists import check_element_exists
 from src.helpers.exception import save_debug_artifacts
-from src.helpers.file_helper import clean_string
+from src.helpers.file_helper import clean_string, session_cookie_file_for_email
+from src.helpers.session import load_cookies_from_file_and_apply, save_cookies_to_file
 from src.interfaces.startup_arguments import StartupArguments
 from src.teachable.auth.login import find_login, login
 from src.teachable.download.download_course_classic import download_course_classic
@@ -39,17 +40,11 @@ class TeachableDownloader:
         """
         Run the downloader
         This method handles the login process and initiates the download of a single course.
-        :param course_url: str
-            The URL of the course to be downloaded.
-        :param email: str
-            The email address used to log in to the platform.
-        :param login_url: str
-            The URL of the login page. If not provided, manual login is assumed.
-        :return: None
+        It will attempt to restore a saved session (cookies) for `email` before prompting for OTP.
         """
         logger.log("Starting login", status=logger.Status.INFO)
 
-        # Check if login_url is not set
+        # If a login_url is provided, navigate there (we later navigate to course).
         if login_url is None:
             try:
                 find_login(self, course_url)
@@ -58,17 +53,81 @@ class TeachableDownloader:
         else:
             self.driver.get(login_url)
 
+        # Attempt to restore cookies/session before performing the login flow.
+        cookie_file = session_cookie_file_for_email(email)
+        restored = False
         try:
-            login(self, email)
-        except Exception as e:
-            tb = traceback.format_exc()
-            logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
-            # salva artefatti per debugging
+            if os.path.isfile(cookie_file):
+                logger.log(
+                    "Found saved session cookies — attempting to restore session",
+                    status=logger.Status.INFO,
+                )
+                try:
+                    applied = load_cookies_from_file_and_apply(
+                        self.driver, cookie_file, course_url
+                    )
+                    if applied:
+                        # After applying cookies, visit the course page and check whether login is required
+                        self.driver.get(course_url)
+                        time.sleep(1)
+                        # If the page does not show a Login link, assume we are authenticated
+                        if not check_element_exists(self, By.LINK_TEXT, "Login"):
+                            logger.log(
+                                "Session restored successfully, login not required.",
+                                status=logger.Status.INFO,
+                            )
+                            restored = True
+                        else:
+                            logger.log(
+                                "Session cookies applied but login still required (session may be expired).",
+                                status=logger.Status.INFO,
+                            )
+                    else:
+                        logger.log(
+                            "Could not apply saved cookies (no cookies applied).",
+                            status=logger.Status.INFO,
+                        )
+                except Exception as e:
+                    logger.log(
+                        f"Session restore attempt failed: {e}",
+                        status=logger.Status.DEBUG,
+                    )
+        except Exception:
+            # Any issues should not stop the flow; we'll proceed to normal login
+            pass
+
+        # If we did not restore a valid session, perform the interactive/OTP login.
+        if not restored:
             try:
-                save_debug_artifacts(self.driver, prefix="login_failure")
-            except Exception:
-                pass
-            return
+                login(self, email)
+            except Exception as e:
+                tb = traceback.format_exc()
+                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
+                # save debug artifacts for debugging purposes
+                try:
+                    save_debug_artifacts(self.driver, prefix="login_failure")
+                except Exception:
+                    pass
+                return
+            else:
+                # If login() returned without exception, try to save the cookies for later reuse.
+                try:
+                    saved = save_cookies_to_file(self.driver, cookie_file)
+                    if saved:
+                        logger.log(
+                            f"Saved session cookies to {cookie_file}",
+                            status=logger.Status.INFO,
+                        )
+                    else:
+                        logger.log(
+                            "Could not save session cookies (save failed).",
+                            status=logger.Status.WARNING,
+                        )
+                except Exception as e:
+                    logger.log(
+                        f"Failed to save session cookies: {e}",
+                        status=logger.Status.DEBUG,
+                    )
 
         logger.log(
             "Starting download of course: " + course_url, status=logger.Status.INFO
@@ -83,20 +142,8 @@ class TeachableDownloader:
 
     def start_multi_downloader(self, url_array, email, login_url):
         """
-        This method handles batch downloading of courses. It navigates to the given URLs, logs in if necessary,
-        and initiates the download process for each course.
-
-        :param url_array: List[str]
-            An array of URLs pointing to the courses that need to be downloaded.
-        :param email: str
-            The email address used to log in to the platform.
-        :param login_url: str
-            The URL of the login page. If not provided, manual login is assumed.
-        :param man_login_url: str
-            The URL of the page to navigate to after manual login. This parameter is optional.
-            If provided, the script will wait until the user has manually navigated to this URL
-            before starting the download process.
-        :return: None
+        This method handles batch downloading of courses. It navigates to the given URLs, tries to restore session
+        using the same approach used by start_donwloader, and initiates the download process for each course.
         """
         logger.log("Starting login", status=logger.Status.INFO)
 
@@ -106,17 +153,76 @@ class TeachableDownloader:
             logger.log("Login url is not set", status=logger.Status.INFO)
             return
 
+        # Attempt session restore for batch mode too
+        cookie_file = session_cookie_file_for_email(email)
+        restored = False
         try:
-            login(self, email)
-        except Exception as e:
-            tb = traceback.format_exc()
-            logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
-            # salva artefatti per debugging
+            if os.path.isfile(cookie_file):
+                logger.log(
+                    "Found saved session cookies — attempting to restore session (batch mode)",
+                    status=logger.Status.INFO,
+                )
+                try:
+                    applied = load_cookies_from_file_and_apply(
+                        self.driver,
+                        cookie_file,
+                        url_array[0] if url_array else login_url,
+                    )
+                    if applied:
+                        # After applying cookies, visit first course URL and check whether login is required
+                        self.driver.get(url_array[0] if url_array else login_url)
+                        time.sleep(1)
+                        if not check_element_exists(self, By.LINK_TEXT, "Login"):
+                            logger.log(
+                                "Session restored successfully (batch mode), login not required.",
+                                status=logger.Status.INFO,
+                            )
+                            restored = True
+                        else:
+                            logger.log(
+                                "Batch mode: session cookies applied but login still required (may be expired).",
+                                status=logger.Status.INFO,
+                            )
+                except Exception as e:
+                    logger.log(
+                        f"Batch session restore attempt failed: {e}",
+                        status=logger.Status.DEBUG,
+                    )
+        except Exception:
+            pass
+
+        if not restored:
             try:
-                save_debug_artifacts(self.driver, prefix="login_failure")
-            except Exception:
-                pass
-            return
+                login(self, email)
+            except Exception as e:
+                tb = traceback.format_exc()
+                logger.log(
+                    f"Could not login (batch mode): {e}\n{tb}",
+                    status=logger.Status.ERROR,
+                )
+                try:
+                    save_debug_artifacts(self.driver, prefix="login_failure")
+                except Exception:
+                    pass
+                return
+            else:
+                try:
+                    saved = save_cookies_to_file(self.driver, cookie_file)
+                    if saved:
+                        logger.log(
+                            f"Saved session cookies to {cookie_file} (batch mode)",
+                            status=logger.Status.INFO,
+                        )
+                    else:
+                        logger.log(
+                            "Could not save session cookies (batch mode)",
+                            status=logger.Status.WARNING,
+                        )
+                except Exception as e:
+                    logger.log(
+                        f"Failed to save session cookies (batch mode): {e}",
+                        status=logger.Status.DEBUG,
+                    )
 
         logger.log("Running batch download of courses ", status=logger.Status.INFO)
         for url in url_array:

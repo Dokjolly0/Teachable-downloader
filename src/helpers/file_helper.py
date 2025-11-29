@@ -76,3 +76,18 @@ def sanitize_for_filename(s: str, max_len=200):
     if len(s) > max_len:
         s = s[:max_len]
     return s
+
+
+def sanitize_email_for_filename(email: str) -> str:
+    """Return a filesystem-safe representation of the email for cookie filenames."""
+    return "".join(
+        ch for ch in email if ch.isalnum() or ch in ("@", ".", "-", "_")
+    ).replace("@", "_at_")
+
+
+def session_cookie_file_for_email(email: str) -> str:
+    """Compute the session cookie filepath for the given email."""
+    sessions_dir = os.path.join(os.getcwd(), "sessions")
+    os.makedirs(sessions_dir, exist_ok=True)
+    safe = sanitize_email_for_filename(email)
+    return os.path.join(sessions_dir, f"cookies_{safe}.json")
