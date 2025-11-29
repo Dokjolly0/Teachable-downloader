@@ -133,7 +133,7 @@ python3 -m pip install -U yt-dlp
 1. Clone the repo
 
 ```sh
-git clone https://github.com/FallingLights/Teachable-Dl.git
+git clone https://github.com/Dokjolly0/Teachable-Downloader.git
 ```
 
 2. Enter to the project
@@ -175,13 +175,7 @@ source env/bin/activate
 Run the program
 
 ```sh
-python3 main.py --url <course_url> --email <email> --password <password>
-```
-
-or run with manual login
-
-```sh
-python3 main.py --url <course_url> --man_login_url <man_login_url> --verbose
+.\env\script\python.exe -m src.main --url <course_url> --email <email>
 ```
 
 > Make sure to navigate to the url within the first tab and check the console for an exact url match.
@@ -194,7 +188,7 @@ python main.py --help
 <!-- ROADMAP -->
 
 ## Roadmap
-
+### Github original repository issue
 See the [open issues](https://github.com/FallingLights/Teachable-Dl/issues) for a full list of proposed features (and known issues).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
