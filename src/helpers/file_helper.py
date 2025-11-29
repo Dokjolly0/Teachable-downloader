@@ -26,23 +26,15 @@ def truncate_title_to_fit_file_name(title, max_file_name_length=250):
 
 def clean_string(data):
     logger.log("Cleaning string: " + data, logger.Status.INFO)
-    # Remove all non-ASCII characters (including emojis)
+    # Mantieni solo ASCII
     data = data.encode("ascii", "ignore").decode("ascii")
-    # Replace specific characters with char '-'
-    char: str = "-"
-    return (
-        data.replace("\n", char)
-        .replace(" ", char)
-        .replace(":", char)
-        .replace("/", char)
-        .replace("|", char)
-        .replace("*", "")
-        .replace("?", char)
-        .replace("<", char)
-        .replace(">", char)
-        .replace('"', char)
-        .replace("\\", char)
-    )
+    # Remove invalid filename characters
+    invalid = [":", "/", "|", "*", "?", "<", ">", '"', "\\"]
+    for ch in invalid:
+        data = data.replace(ch, "")
+    # Replace new lines with spaces and trim leading/trailing spaces
+    data = data.replace("\n", " ").strip()
+    return data
 
 
 def read_urls_from_file(file_path):

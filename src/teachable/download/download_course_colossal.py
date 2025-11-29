@@ -66,10 +66,10 @@ def download_course_colossal(self: "TeachableDownloader") -> TeachableDownloader
             By.CSS_SELECTOR, ".block__curriculum__section__title"
         ).text
         chapter_title = clean_string(chapter_title)
-        chapter_title = "{:02d}-{}".format(chapter_idx, chapter_title)
-        logger.log("Found chapter: " + chapter_title, status=logger.Status.INFO)
+        filename = f"{chapter_idx} {chapter_title}.mp4"
+        logger.log("Filename: " + filename, status=logger.Status.INFO)
 
-        download_path = os.path.join(course_path, chapter_title)
+        download_path = os.path.join(course_path, filename)
         os.makedirs(download_path, exist_ok=True)
 
         chapter_idx += 1

@@ -70,15 +70,15 @@ def download_course_simple(
         bars = slim_section.find_elements(By.CSS_SELECTOR, ".bar")
         chapter_title = slim_section.find_element(By.CSS_SELECTOR, ".heading").text
         chapter_title = clean_string(chapter_title)
-        chapter_title = "{:02d}-{}".format(chapter_idx, chapter_title)
-        logger.log("Found chapter: " + chapter_title, status=logger.Status.INFO)
+        filename = f"{chapter_idx} {chapter_title}.mp4"
+        logger.log("Filename: " + filename, status=logger.Status.INFO)
 
         try:
             WebDriverWait(slim_section, self.global_timeout).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, ".drip-tag"))
             )
             logger.log(
-                'Chapter "%s" not available, skipping' + chapter_title,
+                'Chapter "%s" not available, skipping' + filename,
                 status=logger.Status.WARNING,
             )
             continue
@@ -86,7 +86,7 @@ def download_course_simple(
             logger.log("Chapter is available", status=logger.Status.INFO)
             pass  # Element wasn't found so the chapter is available
 
-        download_path = os.path.join(course_path, chapter_title)
+        download_path = os.path.join(course_path, filename)
         os.makedirs(download_path, exist_ok=True)
 
         idx = 1

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import time
 import traceback
@@ -35,15 +33,17 @@ class TeachableDownloader:
         self._complete_lecture = args.complete_lecture
         self.global_timeout = args.selenium_driver_timeout
 
-    def run(self, course_url, email, login_url):
+    def start_donwloader(self, course_url, email, login_url):
         """
         Run the downloader
-        1. course_url: URL of the course
-        2. email: email of the user
-        3. password: password of the user
-        4. login_url: URL of the login
-        5. manual_login_url: URL for manual login
-        6. return: None
+        This method handles the login process and initiates the download of a single course.
+        :param course_url: str
+            The URL of the course to be downloaded.
+        :param email: str
+            The email address used to log in to the platform.
+        :param login_url: str
+            The URL of the login page. If not provided, manual login is assumed.
+        :return: None
         """
         logger.log("Starting login", status=logger.Status.INFO)
 
@@ -79,7 +79,7 @@ class TeachableDownloader:
                 status=logger.Status.ERROR,
             )
 
-    def run_batch(self, url_array, email, login_url):
+    def start_multi_downloader(self, url_array, email, login_url):
         """
         This method handles batch downloading of courses. It navigates to the given URLs, logs in if necessary,
         and initiates the download process for each course.
@@ -143,7 +143,7 @@ class TeachableDownloader:
             if check_element_exists(self, By.ID, "challenge-stage"):
                 self = bypass_cloudflare(self)
 
-        WebDriverWait(self.driver, timeout=self.global_timeout).until(
+        _ = WebDriverWait(self.driver, timeout=self.global_timeout).until(
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
 
