@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
-import wget
+import requests
 from selenium.webdriver.common.by import By
 
 import src.helpers.logger as logger
@@ -17,31 +17,47 @@ def download_attachments(
 ) -> TeachableDownloader:
     video_title = "{:02d}-{}".format(video_index, title)
 
-    # Grab the video attachments type file
     video_attachments = self.driver.find_elements(
         By.CLASS_NAME, "lecture-attachment-type-file"
     )
-    # Get all links from the video attachments
 
     if video_attachments:
         video_links = video_attachments[0].find_elements(By.TAG_NAME, "a")
+        output_dir = os.path.join(output_path, video_title)
+        os.makedirs(output_dir, exist_ok=True)
 
-        output_path = os.path.join(output_path, video_title)
-        os.makedirs(output_path, exist_ok=True)
+        for video_link in video_links:
+            file_url = video_link.get_attribute("href")
+            file_name = video_link.text
 
-        # Get href attribute from the first link
-        if video_links:
-            for video_link in video_links:
-                link = video_link.get_attribute("href")
-                file_name = video_link.text
-                logger.log(
-                    "Downloading attachment: " + file_name + " for video: " + title,
-                    status=logger.Status.INFO,
+            if not file_url:
+                continue
+
+            logger.log(
+                f"Downloading attachment: {file_name}", status=logger.Status.INFO
+            )
+
+            # Use requests to download the file
+            try:
+                response = requests.get(
+                    file_url, headers=self.headers, timeout=30, stream=True
                 )
-                # Download file and save the file in output_path directory
-                wget.download(link, out=output_path)
+                response.raise_for_status()
+
+                file_path = os.path.join(output_dir, file_name)
+                with open(file_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+
+                logger.log(f"Downloaded: {file_name}", status=logger.Status.INFO)
+
+            except Exception as e:
+                logger.log(
+                    f"Failed to download {file_name}: {e}", status=logger.Status.WARNING
+                )
+
     else:
-        logger.log(
-            "No attachments found for video: " + title, status=logger.Status.WARNING
-        )
+        logger.log(f"No attachments for: {title}", status=logger.Status.DEBUG)
+
     return self

@@ -36,6 +36,7 @@ def download_subtitle(
                 "key": "FFmpegMetadata",
             },
         ],
+        "ignoreerrors": True,
         "http_headers": self.headers,
         "allsubtitles": True,
         "subtitleslangs": ["all"],

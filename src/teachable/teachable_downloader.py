@@ -18,6 +18,8 @@ from src.teachable.auth.login import find_login, login
 from src.teachable.download.download_course_classic import download_course_classic
 from src.teachable.download.download_course_colossal import download_course_colossal
 from src.teachable.download.download_course_simple import download_course_simple
+from src.teachable.download.download_subtitle import download_subtitle
+from src.teachable.download.download_video import download_video
 from src.utils.cloudflare_bypass import bypass_cloudflare
 
 
@@ -188,6 +190,23 @@ class TeachableDownloader:
             complete_button.click()
             logger.log("Completed lecture", status=logger.Status.INFO)
             time.sleep(3)
+
+    def _download_video_and_subs_parallel(self, link, title, video_index, output_path):
+        """Download parallelo di video e sottotitoli"""
+        # Implememt threading or multiprocessing here
+        try:
+            self = download_video(self, link, title, video_index, output_path)
+        except Exception as e:
+            logger.log(
+                f"Video download failed: {title} - {e}", status=logger.Status.ERROR
+            )
+
+        try:
+            self = download_subtitle(self, link, title, video_index, output_path)
+        except Exception as e:
+            logger.log(
+                f"Subtitle download failed: {title} - {e}", status=logger.Status.WARNING
+            )
 
     def save_webpage_as_html(self, title, video_index, output_path):
         output_file = os.path.join(

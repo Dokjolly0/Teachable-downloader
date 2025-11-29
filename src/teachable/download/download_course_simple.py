@@ -21,9 +21,10 @@ if TYPE_CHECKING:
     from src.teachable.teachable_downloader import TeachableDownloader
 
 
-def download_course_simple(
+def download_course_simple_fallback(
     self: "TeachableDownloader", course_url
 ) -> "TeachableDownloader":
+    "If the batch extraction fails, use this fallback method"
     self.driver.implicitly_wait(2)
     logger.log("Detected next course format", status=logger.Status.INFO)
     course_title = self.get_course_title_next(course_url)
@@ -108,3 +109,115 @@ def download_course_simple(
 
     self = download_videos_from_links(self, video_list)
     return self
+
+
+def download_course_simple(
+    self: "TeachableDownloader", course_url
+) -> "TeachableDownloader":
+    self.driver.implicitly_wait(2)
+    logger.log("Detected next course format", status=logger.Status.INFO)
+    course_title = self.get_course_title_next(course_url)
+    logger.log("Found course title: " + course_title, status=logger.Status.INFO)
+    course_path = create_course_folder(course_title)
+
+    output_file = os.path.join(course_path, "course.html")
+    try:
+        with open(output_file, "w+", encoding="utf-8") as f:
+            f.write(self.driver.page_source)
+    except Exception as e:
+        logger.log(f"Could not save course html: {e}", status=logger.Status.ERROR)
+
+    # Download course image
+    try:
+        logger.log("Downloading course image", status=logger.Status.INFO)
+        image_element = self.driver.find_element(
+            By.XPATH, '//*[@id="__next"]/div/div/div[2]/div/div[1]/img'
+        )
+        logger.log("Found course image", status=logger.Status.INFO)
+        image_link = image_element.get_attribute("src")
+        # Save image
+        image_path = os.path.join(course_path, "course-image.jpg")
+        # send a GET request to the image link
+        try:
+            response = requests.get(image_link)
+            # write the image data to a file
+            with open(image_path, "wb") as f:
+                f.write(response.content)
+            # print a message indicating that the image was downloaded
+            logger.log("Image downloaded successfully.", status=logger.Status.INFO)
+        except Exception as e:
+            # print a message indicating that the image download failed
+            logger.log(f"Failed to download image: {e}", status=logger.Status.WARNING)
+    except Exception as e:
+        logger.log(f"Could not find course image:  {e}", status=logger.Status.WARNING)
+        pass
+
+    video_list = _extract_all_lectures_batch(self, course_path, course_url)
+    self = download_videos_from_links(self, video_list)
+    return self
+
+
+def _extract_all_lectures_batch(
+    self: "TeachableDownloader", course_path: str, course_url: str
+):
+    """Estrae tutte le lezioni in una singola operazione"""
+    video_list = []
+
+    # Javascript is executed in the context of the page to extract all video links and titles
+    script = """
+    var results = [];
+    var sections = document.querySelectorAll('.slim-section');
+
+    sections.forEach(function(section, sectionIdx) {
+        var chapterTitle = section.querySelector('.heading')?.textContent?.trim() || '';
+        var isAvailable = !section.querySelector('.drip-tag');
+
+        if (isAvailable) {
+            var bars = section.querySelectorAll('.bar');
+            bars.forEach(function(bar, barIdx) {
+                var video = bar.querySelector('.text');
+                if (video) {
+                    results.push({
+                        sectionIdx: sectionIdx + 1,
+                        barIdx: barIdx + 1,
+                        chapterTitle: chapterTitle,
+                        title: video.textContent?.trim() || '',
+                        url: video.getAttribute('href') || ''
+                    });
+                }
+            });
+        }
+    });
+    return results;
+    """
+
+    try:
+        raw_data = self.driver.execute_script(script)
+
+        for item in raw_data:
+            chapter_title = clean_string(item["chapterTitle"])
+            filename = f"{item['sectionIdx']} {chapter_title}.mp4"
+            download_path = os.path.join(course_path, filename)
+            os.makedirs(download_path, exist_ok=True)
+
+            title = clean_string(item["title"])
+            truncated_title = truncate_title_to_fit_file_name(title)
+
+            video_list.append(
+                {
+                    "link": item["url"],
+                    "title": truncated_title,
+                    "idx": item["barIdx"],
+                    "download_path": download_path,
+                }
+            )
+
+    except Exception as e:
+        logger.log(
+            f"Batch extraction failed, using fallback: {e}",
+            status=logger.Status.WARNING,
+        )
+        # Fallback original methods
+        video_list = download_course_simple_fallback(self, course_url)
+
+    return video_list

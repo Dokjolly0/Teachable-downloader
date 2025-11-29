@@ -37,6 +37,7 @@ def download_video(
         "writesubtitles": True,
         "subtitleslangs": ["all"],
         "subtitlesformat": "srt",
+        "ignoreerrors": True,
         "http_headers": self.headers,
         "concurrent_fragment_downloads": 15,
         "outtmpl": os.path.join(

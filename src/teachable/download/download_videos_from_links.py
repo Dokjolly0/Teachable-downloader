@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
 from typing import TYPE_CHECKING
 
+import selenium.webdriver.support.expected_conditions as EC
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
 
 import src.helpers.logger as logger
-from src.teachable.download.downlaod_video_attachments import download_attachments
-from src.teachable.download.download_subtitle import download_subtitle
-from src.teachable.download.download_video import download_video
 from src.teachable.download.download_video_file import download_video_file
 
 if TYPE_CHECKING:
@@ -18,131 +16,101 @@ if TYPE_CHECKING:
 def download_videos_from_links(
     self: "TeachableDownloader", video_list
 ) -> TeachableDownloader:
+    """Version optimized for faster downloads"""
+    original_window = self.driver.current_window_handle
+
     for video in video_list:
-        if self.driver.current_url != video["link"]:
-            logger.log(
-                "Navigating to lecture: " + video["title"],
-                status=logger.Status.INFO,
-            )
-            self.driver.get(video["link"])
-            self.driver.implicitly_wait(self.global_timeout)
-        logger.log("Downloading lecture: " + video["title"], status=logger.Status.INFO)
-
-        # logger.log("Disabling autoplay", status=logger.Status.INFO)
-        # self.driver.execute_script('var checkbox = document.getElementById("custom-toggle-autoplay");'
-        #                            'if (checkbox.checked) {checkbox.click();}')
-
         try:
-            logger.log("Saving html", status=logger.Status.INFO)
-            self.save_webpage_as_html(
-                video["title"], video["idx"], video["download_path"]
+            logger.log(f"Processing: {video['title']}", status=logger.Status.INFO)
+            # Open video in new tab
+            self.driver.execute_script(f"window.open('{video['link']}', '_blank');")
+            new_window = [
+                w for w in self.driver.window_handles if w != original_window
+            ][0]
+            self.driver.switch_to.window(new_window)
+            # Wait for page to load
+            _ = WebDriverWait(self.driver, 5).until(
+                EC.presence_of_element_located((By.TAG_NAME, "body"))
             )
-        except Exception as e:
-            logger.log(
-                f"Could not save html: {video['title']} cause: {e}",
-                status=logger.Status.WARNING,
-            )
-
-        try:
-            logger.log("Downloading attachments", status=logger.Status.INFO)
-            self = download_attachments(
-                self,
-                video["link"],
-                video["title"],
-                video["idx"],
-                video["download_path"],
-            )
-        except Exception as e:
-            logger.log(
-                f"Could not download attachments: {video['title']} cause: {e}",
-                status=logger.Status.WARNING,
-            )
-
-        try:
-            logger.log(
-                "Trying to download video as an attachment",
-                status=logger.Status.DEBUG,
-            )
-            if download_video_file(
-                self, video["title"], video["idx"], video["download_path"]
-            ):
-                continue
+            # Process video in the new tab
+            _process_video_in_tab(self, video)
 
         except Exception as e:
-            logger.log(
-                f"Could not download video as an attachment: {video['title']} cause: {e}",
-                status=logger.Status.WARNING,
-            )
+            logger.log(f"Failed {video['title']}: {e}", status=logger.Status.ERROR)
+        finally:
+            # Close the tab and return to original window
+            self = _safe_close_current_tab(self, original_window)
+    return self
 
-        video_iframes = self.driver.find_elements(
-            By.XPATH, "//iframe[starts-with(@data-testid, 'embed-player')]"
+
+def _process_video_in_tab(self: "TeachableDownloader", video) -> TeachableDownloader:
+    """Processa un singolo video nella scheda corrente"""
+    # Save HTML
+    self.save_webpage_as_html(video["title"], video["idx"], video["download_path"])
+    try:
+        if download_video_file(
+            self, video["title"], video["idx"], video["download_path"]
+        ):
+            return self  # If works, no need to proceed further
+    except Exception as e:
+        logger.log(
+            f"Attachment download failed, proceeding to iframe method: {e}",
+            status=logger.Status.WARNING,
         )
+    # If not, use iframe method
+    self = _download_via_iframe_optimized(self, video)
+    return self
 
-        for i, iframe in enumerate(video_iframes):
-            try:
-                logger.log("Switching to video frame", status=logger.Status.INFO)
-                self.driver.switch_to.frame(iframe)
 
-                script_text = self.driver.find_element(By.ID, "__NEXT_DATA__")
-                json_text = json.loads(script_text.get_attribute("innerHTML"))
-                link = json_text["props"]["pageProps"]["applicationData"][
-                    "mediaAssets"
-                ][0]["urlEncrypted"]
+def _download_via_iframe_optimized(
+    self: "TeachableDownloader", video
+) -> TeachableDownloader:
+    """Versione ottimizzata del download via iframe"""
+    video_iframes = self.driver.find_elements(
+        By.XPATH, "//iframe[starts-with(@data-testid, 'embed-player')]"
+    )
 
-                # Append -n to the video title if there are multiple iframes
+    for i, iframe in enumerate(video_iframes):
+        try:
+            self.driver.switch_to.frame(iframe)
+
+            # Extract video link using JavaScript to avoid multiple DOM queries
+            link = self.driver.execute_script("""
+                try {
+                    var script = document.getElementById('__NEXT_DATA__');
+                    var data = JSON.parse(script.innerHTML);
+                    return data.props.pageProps.applicationData.mediaAssets[0].urlEncrypted;
+                } catch(e) {
+                    return null;
+                }
+            """)
+
+            if link:
                 video_title = video["title"] + (
-                    "-" + str(i + 1) if len(video_iframes) > 1 else ""
+                    f"-{i + 1}" if len(video_iframes) > 1 else ""
                 )
-
-                try:
-                    logger.log("Downloading subtitle", status=logger.Status.INFO)
-                    self = download_subtitle(
-                        self,
-                        link,
-                        video_title,
-                        video["idx"],
-                        video["download_path"],
-                    )
-                except Exception as e:
-                    logger.log(
-                        f"Could not download subtitle: {video_title} cause: {e}",
-                        status=logger.Status.WARNING,
-                    )
-
-                try:
-                    logger.log("Downloading video", status=logger.Status.INFO)
-                    self = download_video(
-                        self,
-                        link,
-                        video_title,
-                        video["idx"],
-                        video["download_path"],
-                    )
-                except Exception as e:
-                    logger.log(
-                        f"Could not download video: {video_title} cause: {e}",
-                        status=logger.Status.WARNING,
-                    )
-
-                self.driver.switch_to.default_content()  # Switch back to main content before the next iteration
-
-            except Exception as e:
-                logger.log(
-                    f"Could not find video: {video['title']} cause: {e}",
-                    status=logger.Status.WARNING,
+                # Download subtitle and video in parallel
+                self._download_video_and_subs_parallel(
+                    link, video_title, video["idx"], video["download_path"]
                 )
-                continue
+        except Exception as e:
+            logger.log(f"Iframe {i} failed: {e}", status=logger.Status.WARNING)
+        finally:
+            self.driver.switch_to.default_content()
+    return self
 
-        logger.log("Downloaded video: " + video["title"], status=logger.Status.INFO)
 
-        if self._complete_lecture:
-            try:
-                logger.log("Completing lecture", status=logger.Status.INFO)
-                self.complete_lecture()
-            except Exception as e:
-                logger.log(
-                    f"Could not complete lecture: {video['title']} cause: {e}",
-                    status=logger.Status.WARNING,
-                )
-
+def _safe_close_current_tab(
+    self: "TeachableDownloader", original_window
+) -> TeachableDownloader:
+    """Chiudi scheda corrente in modo sicuro"""
+    try:
+        if len(self.driver.window_handles) > 1:
+            self.driver.close()
+            self.driver.switch_to.window(original_window)
+    except Exception as e:
+        logger.log(f"Window switch error: {e}", status=logger.Status.WARNING)
+        # Reset to first window if possible
+        if self.driver.window_handles:
+            self.driver.switch_to.window(self.driver.window_handles[0])
     return self
