@@ -49,7 +49,7 @@ class TeachableDownloader:
             try:
                 find_login(self, course_url)
             except Exception as e:
-                logger.log(f"Could not find login: {e}", status=logger.Status.ERROR)
+                logger.log("Could not find login:", status=logger.Status.ERROR, exc=e)
         else:
             self.driver.get(login_url)
 
@@ -89,8 +89,9 @@ class TeachableDownloader:
                         )
                 except Exception as e:
                     logger.log(
-                        f"Session restore attempt failed: {e}",
+                        "Session restore attempt failed:",
                         status=logger.Status.DEBUG,
+                        exc=e,
                     )
         except Exception:
             # Any issues should not stop the flow; we'll proceed to normal login
@@ -102,7 +103,7 @@ class TeachableDownloader:
                 login(self, email)
             except Exception as e:
                 tb = traceback.format_exc()
-                logger.log(f"Could not login: {e}\n{tb}", status=logger.Status.ERROR)
+                logger.log(f"Could not login:\n{tb}", status=logger.Status.ERROR, exc=e)
                 # save debug artifacts for debugging purposes
                 try:
                     save_debug_artifacts(self.driver, prefix="login_failure")
@@ -125,8 +126,9 @@ class TeachableDownloader:
                         )
                 except Exception as e:
                     logger.log(
-                        f"Failed to save session cookies: {e}",
+                        "Failed to save session cookies:",
                         status=logger.Status.DEBUG,
+                        exc=e,
                     )
 
         logger.log(
@@ -136,8 +138,9 @@ class TeachableDownloader:
             self.pick_course_downloader(course_url)
         except Exception as e:
             logger.log(
-                f"Could not download course: {course_url} cause: {e}",
+                f"Could not download course: {course_url} cause:",
                 status=logger.Status.ERROR,
+                exc=e,
             )
 
     def start_multi_downloader(self, url_array, email, login_url):
@@ -185,8 +188,9 @@ class TeachableDownloader:
                             )
                 except Exception as e:
                     logger.log(
-                        f"Batch session restore attempt failed: {e}",
+                        "Batch session restore attempt failed:",
                         status=logger.Status.DEBUG,
+                        exc=e,
                     )
         except Exception:
             pass
@@ -197,8 +201,9 @@ class TeachableDownloader:
             except Exception as e:
                 tb = traceback.format_exc()
                 logger.log(
-                    f"Could not login (batch mode): {e}\n{tb}",
+                    f"Could not login (batch mode):\n{tb}",
                     status=logger.Status.ERROR,
+                    exc=e,
                 )
                 try:
                     save_debug_artifacts(self.driver, prefix="login_failure")
@@ -220,8 +225,9 @@ class TeachableDownloader:
                         )
                 except Exception as e:
                     logger.log(
-                        f"Failed to save session cookies (batch mode): {e}",
+                        "Failed to save session cookies (batch mode):",
                         status=logger.Status.DEBUG,
+                        exc=e,
                     )
 
         logger.log("Running batch download of courses ", status=logger.Status.INFO)
@@ -230,8 +236,9 @@ class TeachableDownloader:
                 self.pick_course_downloader(url)
             except Exception as e:
                 logger.log(
-                    f"Could not download course: {url} cause: {e}",
+                    f"Could not download course: {url} cause:",
                     status=logger.Status.ERROR,
+                    exc=e,
                 )
 
     def construct_sign_in_url(self, course_url):
@@ -304,14 +311,16 @@ class TeachableDownloader:
             self = download_video(self, link, title, video_index, output_path)
         except Exception as e:
             logger.log(
-                f"Video download failed: {title} - {e}", status=logger.Status.ERROR
+                f"Video download failed: {title}", status=logger.Status.ERROR, exc=e
             )
 
         try:
             self = download_subtitle(self, link, title, video_index, output_path)
         except Exception as e:
             logger.log(
-                f"Subtitle download failed: {title} - {e}", status=logger.Status.WARNING
+                f"Subtitle download failed: {title}",
+                status=logger.Status.WARNING,
+                exc=e,
             )
 
     def save_webpage_as_html(self, title, video_index, output_path):

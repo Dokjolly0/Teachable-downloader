@@ -35,7 +35,7 @@ def get_7za():
             shutil.move(os.path.join(temp_7za_dir, "7za.exe"), exe_path)
             logger.log("7za.exe installed successfully.", status=logger.Status.INFO)
         except Exception as e:
-            logger.log(f"Failed to extract 7za.zip: {e}", status=logger.Status.ERROR)
+            logger.log("Failed to extract 7za.zip:", status=logger.Status.ERROR, exc=e)
             raise
 
         # Clean up the entire temp folder

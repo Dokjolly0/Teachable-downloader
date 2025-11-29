@@ -18,7 +18,7 @@ if __name__ == "__main__":
             downloader.clean_up()
             quit_program(status=1)
         except Exception as e:
-            logger.log(f"Error: {e}", status=logger.Status.ERROR)
+            logger.log("Error:", status=logger.Status.ERROR, exc=e)
             downloader.clean_up()
             quit_program(status=1)
     else:
@@ -39,6 +39,6 @@ if __name__ == "__main__":
             downloader.clean_up()
             quit_program(status=1)
         except Exception as e:
-            logger.log(f"Error: {e}", status=logger.Status.ERROR)
+            logger.log("Error:", status=logger.Status.ERROR, exc=e)
             downloader.clean_up()
             quit_program(status=1)

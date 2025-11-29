@@ -36,7 +36,7 @@ def download_course_simple_fallback(
         with open(output_file, "w+", encoding="utf-8") as f:
             f.write(self.driver.page_source)
     except Exception as e:
-        logger.log(f"Could not save course html: {e}", status=logger.Status.ERROR)
+        logger.log("Could not save course html:", status=logger.Status.ERROR, exc=e)
 
     # Download course image
     try:
@@ -58,9 +58,9 @@ def download_course_simple_fallback(
             logger.log("Image downloaded successfully.", status=logger.Status.INFO)
         except Exception as e:
             # print a message indicating that the image download failed
-            logger.log(f"Failed to download image: {e}", status=logger.Status.WARNING)
+            logger.log("Failed to download image:", status=logger.Status.WARNING, exc=e)
     except Exception as e:
-        logger.log(f"Could not find course image:  {e}", status=logger.Status.WARNING)
+        logger.log("Could not find course image:", status=logger.Status.WARNING, exc=e)
         pass
 
     chapter_idx = 0
@@ -125,7 +125,7 @@ def download_course_simple(
         with open(output_file, "w+", encoding="utf-8") as f:
             f.write(self.driver.page_source)
     except Exception as e:
-        logger.log(f"Could not save course html: {e}", status=logger.Status.ERROR)
+        logger.log("Could not save course html:", status=logger.Status.ERROR, exc=e)
 
     # Download course image
     try:
@@ -147,9 +147,9 @@ def download_course_simple(
             logger.log("Image downloaded successfully.", status=logger.Status.INFO)
         except Exception as e:
             # print a message indicating that the image download failed
-            logger.log(f"Failed to download image: {e}", status=logger.Status.WARNING)
+            logger.log("Failed to download image:", status=logger.Status.WARNING, exc=e)
     except Exception as e:
-        logger.log(f"Could not find course image:  {e}", status=logger.Status.WARNING)
+        logger.log("Could not find course image:", status=logger.Status.WARNING, exc=e)
         pass
 
     video_list = _extract_all_lectures_batch(self, course_path, course_url)
@@ -214,8 +214,9 @@ def _extract_all_lectures_batch(
 
     except Exception as e:
         logger.log(
-            f"Batch extraction failed, using fallback: {e}",
+            "Batch extraction failed, using fallback:",
             status=logger.Status.WARNING,
+            exc=e,
         )
         # Fallback original methods
         video_list = download_course_simple_fallback(self, course_url)

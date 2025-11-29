@@ -23,7 +23,7 @@ def save_debug_artifacts(driver, prefix="debug"):
         full_screenshot_path = os.path.join(screenshot_path, screenshot_filename)
         driver.save_screenshot(full_screenshot_path)
     except Exception as e:
-        logger.log(f"Errore salvataggio screenshot: {e}", logger.Status.ERROR)
+        logger.log("Error saving screenshot:", logger.Status.ERROR, exc=e)
         pass
 
     # --- Page Source ---
@@ -33,7 +33,7 @@ def save_debug_artifacts(driver, prefix="debug"):
         with open(full_pagesource_path, "w", encoding="utf-8") as f:
             f.write(driver.page_source)
     except Exception as e:
-        logger.log(f"Errore salvataggio page source: {e}", logger.Status.ERROR)
+        logger.log("Error saving page source:", logger.Status.ERROR, exc=e)
         pass
 
     # --- Browser Console Logs ---
@@ -44,5 +44,5 @@ def save_debug_artifacts(driver, prefix="debug"):
             for entry in driver.get_log("browser"):
                 f.write(str(entry) + "\n")
     except Exception as e:
-        logger.log(f"Errore salvataggio console logs: {e}", logger.Status.ERROR)
+        logger.log("Error saving console logs:", logger.Status.ERROR, exc=e)
         pass

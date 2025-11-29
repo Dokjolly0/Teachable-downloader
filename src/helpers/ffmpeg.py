@@ -86,7 +86,7 @@ def install_ffmpeg():
         )
     except Exception as e:
         # Catch any other unexpected error during file operations
-        logger.log(f"An error occurred: {e}", status=logger.Status.ERROR)
+        logger.log("An error occurred:", status=logger.Status.ERROR, exc=e)
 
     # Final Cleanup: Remove 7-Zip related files from the root /bin directory
     # Note: 7za.exe must be kept, but its associated files should be removed.

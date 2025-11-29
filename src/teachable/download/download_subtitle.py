@@ -63,13 +63,14 @@ def download_subtitle(
                 info_json = ydl.sanitize_info(info) if info else None
             except Exception as e:
                 logger.log(
-                    f"Could not probe subtitles metadata for: {title} cause: {e}",
+                    "Could not probe subtitles metadata for: {title} cause:",
                     status=logger.Status.WARNING,
+                    exc=e,
                 )
                 info_json = None
     except Exception as e:
         logger.log(
-            f"yt-dlp probe failed for subtitles: {e}", status=logger.Status.WARNING
+            "yt-dlp probe failed for subtitles:", status=logger.Status.WARNING, exc=e
         )
         info_json = None
 
@@ -121,8 +122,9 @@ def download_subtitle(
             req.raise_for_status()
         except Exception as e:
             logger.log(
-                f"Could not fetch subtitle base URL for {title} lang={lang}: {e}",
+                "Could not fetch subtitle base URL for {title} lang={lang}:",
                 status=logger.Status.WARNING,
+                exc=e,
             )
             continue
 
@@ -149,7 +151,8 @@ def download_subtitle(
             )
         except Exception as e:
             logger.log(
-                f"Could not download subtitle: {title} lang={lang} cause: {e}",
+                f"Could not download subtitle: {title} lang={lang} cause:",
                 status=logger.Status.WARNING,
+                exc=e,
             )
     return self

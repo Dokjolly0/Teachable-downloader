@@ -94,8 +94,9 @@ def download_with_yt_dlp(
                 ydl.download([link])
             except Exception as e:
                 logger.log(
-                    f"yt-dlp download failed for {title} link={link} error={e}",
+                    f"yt-dlp download failed for {title} link={link}:",
                     status=logger.Status.WARNING,
+                    exc=e,
                 )
                 return False
     except Exception as e_outer:

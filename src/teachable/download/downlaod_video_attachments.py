@@ -54,7 +54,9 @@ def download_attachments(
 
             except Exception as e:
                 logger.log(
-                    f"Failed to download {file_name}: {e}", status=logger.Status.WARNING
+                    f"Failed to download {file_name}:",
+                    status=logger.Status.WARNING,
+                    exc=e,
                 )
 
     else:

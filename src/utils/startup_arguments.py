@@ -44,8 +44,9 @@ def set_startup_arguments(args):
         quit_program()
     except Exception as e:
         logger.log(
-            f"❌ Errore durante l'impostazione degli argomenti di avvio: {e}",
+            "❌ Errore durante l'impostazione degli argomenti di avvio:",
             status=logger.Status.ERROR,
+            exc=e,
         )
         return None
 
@@ -118,7 +119,8 @@ def get_startup_arguments() -> StartupArguments:
 
     except Exception as e:
         logger.log(
-            f"Error occurred while parsing startup arguments: {e}",
+            "Error occurred while parsing startup arguments:",
             status=logger.Status.ERROR,
+            exc=e,
         )
         quit_program()

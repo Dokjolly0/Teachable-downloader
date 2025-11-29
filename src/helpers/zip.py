@@ -53,4 +53,4 @@ def extract(file_path, destination_folder) -> None:
         logger.log(f"STDOUT: {cpe.stdout}", status=logger.Status.ERROR)
         logger.log(f"STDERR: {cpe.stderr}", status=logger.Status.ERROR)
     except Exception as e:
-        logger.log(f"Failed to extract {file_path}: {e}", status=logger.Status.ERROR)
+        logger.log("Failed to extract {file_path}:", status=logger.Status.ERROR, exc=e)

@@ -24,11 +24,12 @@ def _remove_temp_matches(output_path: str):
                     logger.log(f"Removed temp file {p}", status=logger.Status.DEBUG)
                 except Exception as e:
                     logger.log(
-                        f"Could not remove temp file {p}: {e}",
+                        f"Could not remove temp file {p}:",
                         status=logger.Status.WARNING,
+                        exc=e,
                     )
     except Exception as e:
-        logger.log(f"Error cleaning temp files: {e}", status=logger.Status.DEBUG)
+        logger.log("Error cleaning temp files:", status=logger.Status.DEBUG, exc=e)
 
 
 def download_video_file(
@@ -89,7 +90,7 @@ def download_video_file(
         )
     except Exception as e:
         logger.log(
-            f"Could not set download behavior: {e}", status=logger.Status.WARNING
+            "Could not set download behavior:", status=logger.Status.WARNING, exc=e
         )
 
     # Get list of files before download
@@ -102,7 +103,7 @@ def download_video_file(
     try:
         video_link.click()
     except Exception as e:
-        logger.log(f"Could not click video link: {e}", status=logger.Status.ERROR)
+        logger.log("Could not click video link:", status=logger.Status.ERROR, exc=e)
         return False
 
     # Wait for download to complete by observing new files and ensuring no temp suffix
@@ -142,8 +143,9 @@ def download_video_file(
                     return True
                 except Exception as e:
                     logger.log(
-                        f"Could not rename downloaded file {latest_file}: {e}",
+                        f"Could not rename downloaded file {latest_file}:",
                         status=logger.Status.WARNING,
+                        exc=e,
                     )
                     # fallback: check if final filepath exists
                     if (

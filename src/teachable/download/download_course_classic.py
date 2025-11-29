@@ -40,8 +40,9 @@ def download_course_classic(self: "TeachableDownloader") -> TeachableDownloader:
         )
     except Exception as e:
         logger.log(
-            f"Could not get course title, using tab title instead: {e}",
+            "Could not get course title, using tab title instead:",
             status=logger.Status.WARNING,
+            exc=e,
         )
         course_title = self.driver.title
 
@@ -59,7 +60,7 @@ def download_course_classic(self: "TeachableDownloader") -> TeachableDownloader:
         with open(output_file, "w+", encoding="utf-8") as f:
             f.write(self.driver.page_source)
     except Exception as e:
-        logger.log(f"Could not save course html: {e}", status=logger.Status.ERROR)
+        logger.log("Could not save course html:", status=logger.Status.ERROR, exc=e)
 
     # Get course image
     try:
@@ -88,7 +89,7 @@ def download_course_classic(self: "TeachableDownloader") -> TeachableDownloader:
                 # print a message indicating that the image download failed
                 logger.log("Failed to download image.", status=logger.Status.WARNING)
     except Exception as e:
-        logger.log(f"Could not find course image: {e}", status=logger.Status.WARNING)
+        logger.log("Could not find course image:", status=logger.Status.WARNING, exc=e)
         pass
 
     chapter_idx = 1

@@ -37,11 +37,12 @@ def _cleanup_leftovers_for_target(target_dir: str, expected_basename: str) -> No
                     )
                 except Exception as e:
                     logger.log(
-                        f"Could not remove temp file {p}: {e}",
+                        f"Could not remove temp file {p}:",
                         status=logger.Status.DEBUG,
+                        exc=e,
                     )
     except Exception as e:
-        logger.log(f"Leftover cleanup error: {e}", status=logger.Status.DEBUG)
+        logger.log("Leftover cleanup error:", status=logger.Status.DEBUG, exc=e)
 
 
 def _make_video_id(video: dict) -> str:
@@ -156,7 +157,7 @@ def download_videos_from_links(
                         continue
             except Exception as e:
                 logger.log(
-                    f"Attachment method errored: {e}", status=logger.Status.DEBUG
+                    "Attachment method errored:", status=logger.Status.DEBUG, exc=e
                 )
 
             # 2) Look for anchor tags with m3u8 or .mp4
@@ -356,8 +357,9 @@ def download_videos_from_links(
                     )
                 except Exception as e:
                     logger.log(
-                        f"yt-dlp helper raised exception: {e}",
+                        "yt-dlp helper raised exception:",
                         status=logger.Status.WARNING,
+                        exc=e,
                     )
                     download_ok = False
 
@@ -390,8 +392,9 @@ def download_videos_from_links(
 
         except Exception as e:
             logger.log(
-                f"Failed processing lecture '{video.get('title', '')}': {e}",
+                f"Failed processing lecture '{video.get('title', '')}':",
                 status=logger.Status.ERROR,
+                exc=e,
             )
         finally:
             # Close tab if still open and return to original
