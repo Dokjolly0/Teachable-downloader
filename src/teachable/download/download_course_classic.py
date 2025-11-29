@@ -15,6 +15,7 @@ from src.helpers.file_helper import (
     create_course_folder,
     truncate_title_to_fit_file_name,
 )
+from src.helpers.get_course_title import get_course_title
 from src.teachable.download.download_videos_from_links import download_videos_from_links
 
 if TYPE_CHECKING:
@@ -24,27 +25,7 @@ if TYPE_CHECKING:
 def download_course_classic(self: "TeachableDownloader") -> TeachableDownloader:
     # self.driver.find_elements(By.CLASS_NAME, "course-mainbar")
     logger.log("Detected _mainbar course format", status=logger.Status.INFO)
-    try:
-        logger.log("Getting course title", status=logger.Status.DEBUG)
-        course_title = (
-            WebDriverWait(self.driver, self.global_timeout)
-            .until(
-                EC.presence_of_element_located(
-                    (
-                        By.CSS_SELECTOR,
-                        "body > section > div.course-sidebar > div > h2",
-                    )
-                )
-            )
-            .text
-        )
-    except Exception as e:
-        logger.log(
-            "Could not get course title, using tab title instead:",
-            status=logger.Status.WARNING,
-            exc=e,
-        )
-        course_title = self.driver.title
+    course_title = get_course_title(self.driver, self.global_timeout)
 
     logger.log(
         'Found course title: "' + course_title + '" starting cleaning of title string',

@@ -17,6 +17,7 @@ from src.helpers.file_helper import (
     create_course_folder,
     truncate_title_to_fit_file_name,
 )
+from src.helpers.get_course_title import get_course_title
 from src.teachable.download.download_video import download_with_yt_dlp
 from src.teachable.download.download_video_file import download_video_file
 
@@ -145,20 +146,7 @@ def download_course_colossal(self: "TeachableDownloader") -> "TeachableDownloade
     logger.log("Detected block course format", status=logger.Status.INFO)
 
     # try to get course title and prepare folder
-    try:
-        logger.log("Getting course title", status=logger.Status.INFO)
-        title_el = WebDriverWait(self.driver, self.global_timeout).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, ".course__title"))
-        )
-        course_title = title_el.text
-    except Exception as e:
-        logger.log(
-            "Could not get course title, using tab title instead:",
-            status=logger.Status.WARNING,
-            exc=e,
-        )
-        course_title = self.driver.title
-
+    course_title = get_course_title(self.driver, self.global_timeout)
     course_title_clean = clean_string(course_title)
     course_path = create_course_folder(course_title_clean)
 

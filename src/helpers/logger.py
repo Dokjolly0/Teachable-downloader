@@ -1,9 +1,10 @@
+# src/helpers/logger.py
 import logging
+import re
 import traceback
 from enum import Enum
 from typing import Optional
 
-from src.interfaces.startup_arguments import StartupArguments
 from src.utils.startup_arguments import get_startup_arguments
 
 
@@ -36,6 +37,30 @@ def _ensure_logger_configured(level: int):
     _logger.setLevel(level)
 
 
+def _sanitize_native_stacktrace(text: str) -> str:
+    """
+    Remove native 'Stacktrace:' dumps and trailing hex-address lines from exception text.
+    Heuristic: if 'Stacktrace:' appears, cut everything from that token onward.
+    Also strip long runs of hex-address lines (e.g. lines starting with 0x...).
+    """
+    if not text:
+        return text
+    # If 'Stacktrace:' present, drop it and everything after.
+    idx = text.find("Stacktrace:")
+    if idx != -1:
+        text = text[:idx].rstrip()
+
+    # Remove lines that look like unresolved backtrace (e.g. 0x7ff71833a235)
+    cleaned_lines = []
+    for line in text.splitlines():
+        # If line is mostly hex addresses (with optional whitespace and tabs), skip it
+        if re.match(r"^\s*0x[0-9a-fA-F]{6,}", line):
+            continue
+        cleaned_lines.append(line)
+    cleaned = "\n".join(cleaned_lines).strip()
+    return cleaned
+
+
 def log(
     message: str,
     status: Status = Status.INFO,
@@ -44,21 +69,24 @@ def log(
     exc_info: bool = False,
 ):
     """
-    Improved logging with traceback support.
+    Improved logging with traceback sanitization.
 
-    - exc: pass an Exception object to print its traceback.
+    - exc: pass an Exception object to print its traceback (sanitized).
     - exc_info=True: prints the current exception traceback (inside except).
     """
 
-    # Determine effective verbosity
+    # Decide verbosity -> numeric logging level
     if verbose_level in {0, 1, 2}:
         log_level = [logging.WARNING, logging.INFO, logging.DEBUG][verbose_level]
     else:
-        log_level = _get_default_verbose_level()
+        default_lvl = _get_default_verbose_level()
+        log_level = [logging.WARNING, logging.INFO, logging.DEBUG][
+            min(max(default_lvl, 0), 2)
+        ]
 
     _ensure_logger_configured(log_level)
 
-    # Map status → level
+    # Map status -> logging level
     if status == Status.ERROR:
         level = logging.ERROR
     elif status == Status.WARNING:
@@ -68,20 +96,41 @@ def log(
     else:
         level = logging.INFO
 
-    final_message = message
+    final_message = message or ""
 
-    # Append traceback from explicit exception
+    # If exc_info True: append current traceback (format_exc), sanitized
+    if exc_info:
+        try:
+            tb_text = traceback.format_exc()
+            tb_text = _sanitize_native_stacktrace(tb_text)
+            if tb_text and "NoneType: None" not in tb_text:
+                final_message = (
+                    f"{final_message}\nTraceback (most recent call last):\n{tb_text}"
+                )
+        except Exception:
+            pass
+
+    # If explicit exception object provided: format and sanitize
     if exc is not None:
         try:
-            tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
-            final_message += "\n" + tb
+            tb_lines = traceback.format_exception(type(exc), exc, exc.__traceback__)
+            tb_text = "".join(tb_lines)
+            tb_text = _sanitize_native_stacktrace(tb_text)
+            final_message = f"{final_message}\nException:\n{tb_text}"
         except Exception:
-            final_message += f"\nException: {repr(exc)}"
+            # fallback: include sanitized str(exc)
+            try:
+                cleaned = _sanitize_native_stacktrace(str(exc))
+                final_message = f"{final_message}\nException: {cleaned}"
+            except Exception:
+                final_message = f"{final_message}\nException: {repr(exc)}"
 
-    # Append traceback from current context
-    elif exc_info:
-        tb = traceback.format_exc()
-        final_message += "\n" + tb
-
-    # Emit log
-    _logger.log(level, final_message)
+    # Emit the log
+    try:
+        _logger.log(level, final_message)
+    except Exception:
+        # Avoid raising from logger; fallback to print
+        try:
+            print(f"LOG FAIL [{status}]: {final_message}")
+        except Exception:
+            pass
