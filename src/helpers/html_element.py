@@ -30,3 +30,16 @@ def check_element_exists(self: TeachableDownloader, by: str, selector: str):
         return False
     else:
         return True  # If try not raise exception
+
+
+def get_element(self: TeachableDownloader, by: str, selector: str):
+    """
+    Get element
+    1. by: By.ID, By.CLASS_NAME, By.XPATH, etc.
+    2. selector: the selector to find the element
+    return: element if element exists, None otherwise
+    """
+    try:
+        return self.driver.find_elements(by, selector)
+    except Exception:
+        return None

@@ -11,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 import src.helpers.logger as logger
-from src.helpers.check_element_exists import check_element_exists
+from src.helpers.html_element import check_element_exists
 from src.teachable.auth.handle_otp_login import handle_otp_login
 from src.utils.cloudflare_bypass import bypass_cloudflare
 

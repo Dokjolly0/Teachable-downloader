@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from selenium.webdriver.common.by import By
 
 import src.helpers.logger as logger
-from src.helpers.check_element_exists import check_element_exists
+from src.helpers.html_element import check_element_exists
 
 if TYPE_CHECKING:
     from src.teachable.teachable_downloader import TeachableDownloader

@@ -10,15 +10,21 @@ from selenium.webdriver.support.wait import WebDriverWait
 from seleniumbase import Driver
 
 import src.helpers.logger as logger
-from src.helpers.check_element_exists import check_element_exists
 from src.helpers.exception import save_debug_artifacts
 from src.helpers.file_helper import clean_string, session_cookie_file_for_email
+from src.helpers.html_element import check_element_exists
 from src.helpers.session import load_cookies_from_file_and_apply, save_cookies_to_file
 from src.interfaces.startup_arguments import StartupArguments
 from src.teachable.auth.login import find_login, login
-from src.teachable.download.download_course_classic import download_course_classic
-from src.teachable.download.download_course_colossal import download_course_colossal
-from src.teachable.download.download_course_simple import download_course_simple
+from src.teachable.download.course_type.download_course_classic import (
+    download_course_classic,
+)
+from src.teachable.download.course_type.download_course_colossal import (
+    download_course_colossal,
+)
+from src.teachable.download.course_type.download_course_simple import (
+    download_course_simple,
+)
 from src.teachable.download.download_subtitle import download_subtitle
 from src.teachable.download.download_video import download_video
 from src.utils.cloudflare_bypass import bypass_cloudflare
