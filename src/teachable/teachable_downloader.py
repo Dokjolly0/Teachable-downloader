@@ -16,15 +16,7 @@ from src.helpers.html_element import check_element_exists
 from src.helpers.session import load_cookies_from_file_and_apply, save_cookies_to_file
 from src.interfaces.startup_arguments import StartupArguments
 from src.teachable.auth.login import find_login, login
-from src.teachable.download.course_type.download_course_classic import (
-    download_course_classic,
-)
-from src.teachable.download.course_type.download_course_colossal import (
-    download_course_colossal,
-)
-from src.teachable.download.course_type.download_course_simple import (
-    download_course_simple,
-)
+from src.teachable.download.course_downloader_factory import CourseDownloaderFactory
 from src.teachable.download.download_subtitle import download_subtitle
 from src.teachable.download.download_video import download_video
 from src.utils.cloudflare_bypass import bypass_cloudflare
@@ -268,17 +260,12 @@ class TeachableDownloader:
             EC.presence_of_element_located((By.TAG_NAME, "body"))
         )
 
-        # https://support.teachable.com/hc/en-us/articles/360058715732-Course-Design-Templates
         logger.log("Picking course downloader", status=logger.Status.INFO)
-        if self.driver.find_elements(By.ID, "__next"):
-            logger.log("Choosing __next format", status=logger.Status.INFO)
-            self = download_course_simple(self, course_url)
-        elif self.driver.find_elements(By.CLASS_NAME, "course-mainbar"):
-            logger.log("Choosing course-mainbar format", status=logger.Status.INFO)
-            self = download_course_classic(self)
-        elif self.driver.find_elements(By.CSS_SELECTOR, ".block__curriculum"):
-            logger.log("Choosing .block__curriculum format", status=logger.Status.INFO)
-            self = download_course_colossal(self)
+
+        # Use factory to get appropriate downloader
+        downloader = CourseDownloaderFactory.create_downloader(self)
+        if downloader:
+            return downloader.download_course(course_url)
         else:
             logger.log(
                 "Downloader does not support this course template. Please open an issue on github.",
