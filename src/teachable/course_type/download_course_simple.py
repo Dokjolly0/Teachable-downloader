@@ -15,7 +15,7 @@ from src.helpers.file_helper import (
     create_course_folder,
     truncate_title_to_fit_file_name,
 )
-from src.teachable.download.course_downloader_base import BaseCourseDownloader
+from src.teachable.download.base_course_downloader import BaseCourseDownloader
 from src.teachable.download.download_videos_from_links import download_videos_from_links
 
 if TYPE_CHECKING:
@@ -129,9 +129,7 @@ class SimpleCourseDownloader(BaseCourseDownloader):
 
             chapter_title = slim_section.find_element(By.CSS_SELECTOR, ".heading").text
             chapter_title = clean_string(chapter_title)
-            filename = f"{chapter_idx} {chapter_title}.mp4"
-
-            download_path = os.path.join(course_path, filename)
+            download_path = os.path.join(course_path, chapter_title)
             os.makedirs(download_path, exist_ok=True)
 
             bars = slim_section.find_elements(By.CSS_SELECTOR, ".bar")

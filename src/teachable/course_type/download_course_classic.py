@@ -15,7 +15,7 @@ from src.helpers.file_helper import (
     truncate_title_to_fit_file_name,
 )
 from src.helpers.get_course_title import get_course_title
-from src.teachable.download.course_downloader_base import BaseCourseDownloader
+from src.teachable.download.base_course_downloader import BaseCourseDownloader
 from src.teachable.download.download_videos_from_links import download_videos_from_links
 
 if TYPE_CHECKING:
@@ -36,10 +36,8 @@ class ClassicCourseDownloader(BaseCourseDownloader):
             By.CSS_SELECTOR, ".section-title"
         ).text
         chapter_title = clean_string(chapter_title)
-        filename = f"{chapter_idx} {chapter_title}.mp4"
-        logger.log(f"Chapter: {filename}", status=logger.Status.INFO)
-
-        download_path = os.path.join(course_path, filename)
+        logger.log(f"Chapter: {chapter_title}", status=logger.Status.INFO)
+        download_path = os.path.join(course_path, chapter_title)
         os.makedirs(download_path, exist_ok=True)
 
         video_list = []

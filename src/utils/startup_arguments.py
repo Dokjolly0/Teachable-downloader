@@ -9,15 +9,23 @@ startup_arguments: Optional["StartupArguments"] = None
 
 
 def check_required_args(args: StartupArguments):
-    if args.email:
-        return True
-    else:
+    if not args.email:
         logger.log(
-            "Email are required",
+            "Email are required, please provide an email address.",
             status=logger.Status.ERROR,
             verbose_level=0,
         )
         return False
+
+    if not args.url:
+        logger.log(
+            "URL are required, please provide an URL.",
+            status=logger.Status.ERROR,
+            verbose_level=0,
+        )
+        return False
+
+    return True
 
 
 def get_cached_startup_arguments():
