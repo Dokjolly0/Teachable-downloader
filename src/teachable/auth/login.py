@@ -36,7 +36,7 @@ def find_login(self: "TeachableDownloader", course_url):
         login_element.click()
 
 
-def login(self, email):
+def login(self: "TeachableDownloader", email):
     logger.log("Logging in", status=logger.Status.INFO)
     # Cloudflare bypass
     if check_element_exists(self, By.ID, "challenge-stage"):
@@ -60,6 +60,9 @@ def login(self, email):
 
     # Wait for the OTP form
     logger.log("Waiting for OTP code", status=logger.Status.DEBUG)
-    self = handle_otp_login(self)
-    logger.log("Logged in, switching to course page", status=logger.Status.INFO)
+    if handle_otp_login(self):
+        logger.log("Logged in, switching to course page", status=logger.Status.INFO)
+    else:
+        logger.log("OTP login failed", status=logger.Status.ERROR)
+
     time.sleep(3)

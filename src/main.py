@@ -14,7 +14,7 @@ if __name__ == "__main__":
             downloader.clean_up()
             quit_program(status=0)
         except KeyboardInterrupt:
-            logger.log("Interrupted by user", status=logger.Status.ERROR)
+            logger.log("Interrupted by user", status=logger.Status.DEBUG)
             downloader.clean_up()
             quit_program(status=1)
         except Exception as e:
@@ -22,10 +22,6 @@ if __name__ == "__main__":
             downloader.clean_up()
             quit_program(status=1)
     else:
-        # Check if url argument is passed
-        if not args.url:
-            logger.log("URL is required", status=logger.Status.ERROR)
-            quit_program(status=1)
         try:
             downloader.start_donwloader(
                 course_url=args.url,

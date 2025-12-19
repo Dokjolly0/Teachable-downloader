@@ -7,13 +7,13 @@ from typing import Optional
 from selenium.webdriver.common.by import By
 
 import src.helpers.logger as logger
-from src.teachable.course_type.download_course_classic import (
+from src.teachable.course_type.course_classic import (
     ClassicCourseDownloader,
 )
-from src.teachable.course_type.download_course_colossal import (
+from src.teachable.course_type.course_colossal import (
     ColossalCourseDownloader,
 )
-from src.teachable.course_type.download_course_simple import (
+from src.teachable.course_type.course_simple import (
     SimpleCourseDownloader,
 )
 from src.teachable.download.base_course_downloader import BaseCourseDownloader

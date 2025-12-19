@@ -40,17 +40,6 @@ class TeachableDownloader:
         This method handles the login process and initiates the download of a single course.
         It will attempt to restore a saved session (cookies) for `email` before prompting for OTP.
         """
-        logger.log("Starting login", status=logger.Status.INFO)
-
-        # If a login_url is provided, navigate there (we later navigate to course).
-        if login_url is None:
-            try:
-                find_login(self, course_url)
-            except Exception as e:
-                logger.log("Could not find login:", status=logger.Status.ERROR, exc=e)
-        else:
-            self.driver.get(login_url)
-
         # Attempt to restore cookies/session before performing the login flow.
         cookie_file = session_cookie_file_for_email(email)
         restored = False
@@ -85,15 +74,34 @@ class TeachableDownloader:
                             "Could not apply saved cookies (no cookies applied).",
                             status=logger.Status.INFO,
                         )
+
+                        logger.log("Starting login", status=logger.Status.INFO)
+                        # If a login_url is provided, navigate there (we later navigate to course).
+                        if login_url is None:
+                            try:
+                                find_login(self, course_url)
+                            except Exception as e:
+                                logger.log(
+                                    "Could not find login:",
+                                    status=logger.Status.ERROR,
+                                    exc=e,
+                                )
+                        else:
+                            self.driver.get(login_url)
                 except Exception as e:
                     logger.log(
                         "Session restore attempt failed:",
                         status=logger.Status.DEBUG,
                         exc=e,
                     )
-        except Exception:
+        except Exception as e:
             # Any issues should not stop the flow; we'll proceed to normal login
-            pass
+            logger.log(
+                "Could not restore session:",
+                status=logger.Status.ERROR,
+                exc=e,
+            )
+            raise e
 
         # If we did not restore a valid session, perform the interactive/OTP login.
         if not restored:
