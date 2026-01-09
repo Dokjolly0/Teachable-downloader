@@ -94,14 +94,19 @@ class TeachableDownloader:
                         status=logger.Status.DEBUG,
                         exc=e,
                     )
-        except Exception as e:
+            else:
+                logger.log(
+                    "No saved session cookies found - Login required",
+                    status=logger.Status.INFO,
+                )
+        except Exception as ex:
             # Any issues should not stop the flow; we'll proceed to normal login
             logger.log(
                 "Could not restore session:",
                 status=logger.Status.ERROR,
-                exc=e,
+                exc=ex,
             )
-            raise e
+            raise ex
 
         # If we did not restore a valid session, perform the interactive/OTP login.
         if not restored:
